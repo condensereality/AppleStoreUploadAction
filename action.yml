@@ -1,0 +1,43 @@
+name: 'AppStoreConnect Upload'
+inputs:
+ AppFilename:
+  required: true
+  type: string
+  description: "Artifact filename ios.ipa or mac.app"
+ SignApp: # re-sign application with certificate and inject entitlements. This is for macos at the moment, but will probably expand to be ios compatible too
+  required: true
+  type: boolean
+ TeamIdentifier:
+  required: true
+  type: string
+  description: "ABCDEF09 Apple team ID for inserting into Entitlements (found in AppStore connect or signing certificates in keychain)"
+ InstallerCertificateId:
+  required: true
+  type: string
+  description: "ABCDEF09 Id of installer certificate (found in keychain)"
+ TestFlightPlatform:
+  required: true
+  type: choice
+   options:
+    - "macos"
+    - "ios"
+    - "tvos"
+
+secrets:
+ AppStoreConnect_Auth_Key:
+   required: true
+ AppStoreConnect_Auth_P8_Base64:
+   required: true
+ AppStoreConnect_Auth_Issuer:
+   required: true
+ # data for signing app
+ SigningCertificate_Base64:
+   required: false
+ SigningCertificate_Password:
+   required: false
+ ProvisioningProfile_Base64:
+   required: false
+
+runs:
+  using: 'node16'
+  main: 'AppleAppStoreUpload.js'
