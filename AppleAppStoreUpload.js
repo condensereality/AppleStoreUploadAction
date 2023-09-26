@@ -3,12 +3,11 @@ import * as github from "@actions/github"
 import * as artifact from "@actions/artifact"
 import * as os from "os"
 import * as FileSystem from "fs/promises"
-import * as Path from "path"
-import * as Process from "process"
-import * as Url from "url"
+import { spawn } from "child_process";
+//import * as Url from "url"
 
 //	no __dirname or __filename in module-js node
-const __dirname = Url.fileURLToPath(new URL('.', import.meta.url));
+//const __dirname = Url.fileURLToPath(new URL('.', import.meta.url));
 
 import { GetParam } from './Params.js'
 
@@ -23,10 +22,91 @@ async function DecodeBase64Param(Param)
 	throw `Decode ${Param}`;
 }
 
-async function RunShellCommand(Command)
+
+
+//	returns
+//	{ .ExitCode=0, .StdOut=[], .StdErr=[] }
+//	or throws on error
+async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 {
-	throw `todo: RunShellCommand(${Command})`;
+	if ( !ExeAndArguments )
+		ExeAndArguments = [];
+	//	expecting an array of args, but allow a simple string
+	if ( typeof ExeAndArguments == typeof '' )
+		ExeAndArguments = ExeAndArguments.split(' ');
+	
+	//	pop first as exe
+	const Exe = ExeAndArguments.shift();
+	const Arguments = ExeAndArguments;
+	
+	//console.log(`Running process [${Exe}], args=${Arguments}...`);
+	const Process = spawn( Exe, Arguments );
+	
+	//	promise throws or returns exit code
+	const ProcessPromise = CreatePromise();
+	//	capture everything
+	const StdOut = [];
+	const StdErr = [];
+
+	function OnStdOut(Data)
+	{
+		//	convert node's Buffer output (which ends in linefeed)
+		Data = Data.toString().trimEnd();
+		StdOut.push(Data);
+	}
+	function OnStdErr(Data)
+	{
+		Data = Data.toString().trimEnd();
+		StdErr.push(Data);
+	}
+	function OnError(Error)
+	{
+		if ( Error.message )
+			Error = Error.message;
+
+		ProcessPromise.Reject(Error);
+	}
+	function OnProcessExit(ExitCode)
+	{
+		//console.log(`OnProcessExit(${ExitCode}) null=crash`);
+		if ( ExitCode === null )
+			return OnError(`Null exit code from process (crash?)`);
+			
+		ProcessPromise.Resolve(ExitCode);
+	}
+	Process.on('error',OnError);
+	Process.stdout.on('data',OnStdOut);
+	Process.stderr.on('data',OnStdErr);
+	Process.on("close",OnProcessExit);
+
+	const ExitCode = await ProcessPromise;
+	if ( ExitCode != 0 )
+	{
+		if ( ThrowOnNonZeroExitCode )
+			throw `Process exit code ${ExitCode}; stdout=${StdOut} stderr=${StdErr}`;
+		console.warn(`Process exit code ${ExitCode}; stdout=${StdOut} stderr=${StdErr}`);
+	}
+	
+	//	turn arrays into something slightly easier to use (a string or null)
+	function GetNiceOutput(OutputData)
+	{
+		if ( OutputData.length == 0 )
+			return null;
+		if ( OutputData.length == 1 )
+			return OutputData[0];
+		return OutputData.join(``);
+	}
+	
+	const Output = {};
+	Output.ExitCode = ExitCode;
+	Output.StdOut = GetNiceOutput(StdOut);
+	Output.StdErr = GetNiceOutput(StdErr);
+	
+	//	put stdout together and return it
+	//console.log(`Process output; ${JSON.stringify(Output)}`);
+	return Output;
 }
+
 
 async function WritePlistChange(PlistFilename,Key,Type,Value)
 {
@@ -131,20 +211,20 @@ async function run()
 	const AppFilename = GetParam('AppFilename');
 	const SignApp = GetParam('SignApp') || false;
 	const TestFlightPlatform = GetParam('TestFlightPlatform');
-	const AppStoreConnect_Auth_Key = GetParam('AppStoreConnect_Auth_Key');
-	const AppStoreConnect_Auth_P8_Base64 = GetParam('AppStoreConnect_Auth_P8_Base64');
-	const AppStoreConnect_Auth_Issuer = GetParam('AppStoreConnect_Auth_Issuer');
-	const AppSigningCertificate_Base64 = GetParam('AppSigningCertificate_Base64');
-	const AppSigningCertificate_Password = GetParam('AppSigningCertificate_Password');
 	
 	let ArchiveFilename = AppFilename;
 	
 	if ( TestFlightPlatform == PlaformMacos )
 	{
-		await ModifyMacApp(AppFilename);
-		await SignApp(AppFilename);
-		const PackageFilename = await PackageApp(AppFilename);
-		ArchiveFilename = PackageFilename;
+		//	gr: needs to be nuanced than this i think
+		//		but it will always need to be packaged for upload
+		if ( SignApp )
+		{
+			await ModifyMacApp(AppFilename);
+			await SignApp(AppFilename);
+			const PackageFilename = await PackageApp(AppFilename);
+			ArchiveFilename = PackageFilename;
+		}
 	}
 	
 	await VerifyArchive(ArchiveFilename);
