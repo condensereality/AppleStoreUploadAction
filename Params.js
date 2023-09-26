@@ -42,7 +42,8 @@ function GetParams()
 const Params = GetParams();
 
 
-export function GetParam(Key)
+//	if you specify a default, this wont throw and instead return the default
+export function GetParam(Key,DefaultValueIfMissing=undefined)
 {
 	//	gr: lower case only applies to CLI
 	let CliKey = Key.toLowerCase();
@@ -60,7 +61,10 @@ export function GetParam(Key)
 	if ( process.env.hasOwnProperty(Key) )
 		return process.env[Key];
 	
-	throw `Missing required parameter, github input or env var "${Key}"`;
+	if ( DefaultValueIfMissing === undefined )
+		throw `Missing required parameter, github input or env var "${Key}"`;
+	
+	return DefaultValueIfMissing;
 }
 
 export default Params;
