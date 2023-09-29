@@ -1,5 +1,26 @@
 import * as core from "@actions/core"
 
+function TypeifyValue(ValueString)
+{
+	//	already not-a-string so don't change it
+	if ( typeof ValueString != typeof '' )
+		return ValueString;
+	
+	switch ( ValueString.toLowerCase().trim() )
+	{
+		case 'false':
+			return false;
+			
+		case 'true':
+			return true;
+	}
+	
+	//	todo? spot ints
+
+	//	no change
+	return ValueString;
+}
+
 
 
 function GetParams()
@@ -31,6 +52,9 @@ function GetParams()
 		if ( Value.length == 0 )
 			Value = true;
 		
+		//	turn false and true keywords into bools, so that "false" == false
+		Value = TypeifyValue(Value);
+			
 		//console.log(`Got command line param [${Key}]=[${Value}]`);
 		Params[Key] = Value;
 	}
