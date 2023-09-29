@@ -14,11 +14,12 @@ Mac [app store] Specific
 - `SignApp=true` (defaulted to true) will re-sign internal `.dylibs` and `.frameworks`, insert entitlements, modify `info.plist` with required keys and re-sign app. 
 - `SignPackage=true` (defaulted to `true`) this will sign the package with an installer certificate. The certificate is found internally by matching the team id.
 - `TeamIdentifier=AA1A111A1` Your team identifier (find this in any of your certificates next to your team name envin `Keychain access`, or in AppStoreConnect)
-- `SigningCertificate_Base64` env or input should be a base64 encoded version of your `Apple Distribution` signing certificate
-	- `base64 -i ./AppleDistribution.cer > AppleDistribution.cer.base64.txt`
+- `SigningCertificate_Base64` env or input should be a base64 encoded version of your `Apple Distribution` signing certificate exported to `.p12`
+	- `base64 -i ./AppleDistribution.p12 > AppleDistribution.p12.base64.txt`
 	- Copy this base64 data into a secret and pass into action
 	- or testing locally
-	- `export SigningCertificate_Base64=$(base64 -i ./AppleDistribution.cer)`
+	- `export SigningCertificate_Base64=$(base64 -i ./AppleDistribution.p12)`
+- `SigningCertificate_Password` env or input which is the password to the above `.p12` exported certificate
 - `ProvisioningProfile_Base64` env or input should be a base64 encoded version of your `embedded.provisionprofile` that will be inserted into your .app to allow testflight to be used(provisioned)
 	- `base64 -i ./embedded.provisionprofile > embedded.provisionprofile.base64.txt`
 	- Copy this base64 data into a secret and pass into action

@@ -261,8 +261,10 @@ async function GetEntitlementsFilename(AppFilename)
 	//	generate entitlements file properly (using tools instead of putting in raw xml)
 	await RunShellCommand(`plutil -create xml1 ${Filename}`);
 	await WritePlistChange( Filename, `com.apple.security.app-sandbox`, 'bool','YES' );
+	
+	//	gr: make these param options! I dont want server, but temporarily needed to re-add it
 	await WritePlistChange( Filename, `com.apple.security.network.client`, 'bool','YES' );
-	//await WritePlistChange( Filename, `com.apple.security.network.server`, 'bool','YES' );
+	await WritePlistChange( Filename, `com.apple.security.network.server`, 'bool','YES' );
 
 	//	need to insert team & app identifiers to match with provision file
 	await WritePlistChange( Filename, `com.apple.application-identifier`, 'string', ApplicationIdentifier );
@@ -272,34 +274,63 @@ async function GetEntitlementsFilename(AppFilename)
 }
 
 
-async function InstallSigningCertificate()
+async function FindSigningIdentity()
 {
 	console.log(`Listing existing identities for codesigning...`);
 	//	todo: don't need to install a certificate that's already present
 	const FindIdentityOutput = await RunShellCommand(`security find-identity -p codesigning -v`);
 	
 	const ExistingSigningCertificate = FindTextAroundString( FindIdentityOutput.StdOut, SigningCertificateName );
-	const FoundSigningCertificate = ExistingSigningCertificate != false;
-	
+
+	//	Apple Distribution
+	console.log(FindIdentityOutput.StdOut);
+
+	return ExistingSigningCertificate;
+}
+
+async function InstallSigningCertificate()
+{
 	//	if user didn't provide a signing certificate, and we find one, we'll (hopefully) use that
 	const UserProvidedCertificate = GetParam('SigningCertificate_Base64',false)!=false;
 	if ( !UserProvidedCertificate )
 	{
-		if ( FoundSigningCertificate )
+		if ( ExistingSigningCertificate )
 		{
 			console.log(`Found existing signing certificate for ${SigningCertificateName}... ${ExistingSigningCertificate}`);
 			return;
 		}
 	}
 	
-	//	Apple Distribution
-	console.log(FindIdentityOutput.StdOut);
-
 	console.log(`Installing signing certificate(for ${SigningCertificateName})...`);
-	const SigningCertificateFilename = `./SigningCertificate.cer`;
+	const SigningCertificatePassword = GetParam('SigningCertificate_Password');
+	const SigningCertificateFilename = `./SigningCertificate.cer.p12`;
 	const SigningCertificateContents = await DecodeBase64Param('SigningCertificate_Base64');
-	//await WriteFile(ProvisioningProfileFilename,ProvisioningProfileContents);
-	throw `install certificate`;
+	await WriteFile(SigningCertificateFilename,SigningCertificateContents);
+	
+	//	todo: install to temporary keychain
+	//	todo: more secure
+	//		-x  Specify that private keys are non-extractable after being imported
+	//		-A allows any app to use this certificate (insecure)
+	//	only short hand input args work! (dont believe the --help)
+	//	filenames error if in quotes
+	const InstallCertificateCommand =
+	[
+	 `security`,
+	 `import`,
+	 SigningCertificateFilename,
+	 `-P`,
+	 SigningCertificatePassword,
+	 `-A`,	//	Allow any app to use certificate
+	 `-t`,	//	type (cert)
+	 `cert`,
+	 `-f`,		//	format
+	 `pkcs12`,	//	p12
+	];
+	//set -o pipefail && security import ${{ env.CertificateFilePath }} -P "${{ secrets.AppSigningCertificate_Password }}" -A -t cert -f pkcs12
+
+	//	re-find identity to make sure it was installed
+	const NewFoundIdentity = await FindSigningIdentity();
+	console.log(`Post-install certificate found; ${NewFoundIdentity}`);
 }
 
 //	specified macos here as we insert entitlements
@@ -412,8 +443,9 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 	}
 	
 	//	output the resulting info
+	//	gr: there's tons of output, only show the tail end
 	console.log(`${Function} succeeded; ${RunResult.StdOut}`);
-	console.log(`stderr: ${RunResult.StdErr}`);
+	//console.log(`stderr: ${RunResult.StdErr}`);
 }
 
 async function VerifyArchive(ArchiveFilename)
@@ -453,6 +485,10 @@ async function run()
 	if ( DoUpload )
 	{
 		await UploadArchive(ArchiveFilename);
+	}
+	else
+	{
+		console.log(`Skipping package upload`);
 	}
 }
 
