@@ -264,15 +264,67 @@ async function GetEntitlementsFilename(AppFilename)
 	return Filename;
 }
 
-async function SignApp(AppFilename)
+
+async function InstallSigningCertificate()
+{
+	console.log(`Listing existing identities for codesigning...`);
+	//	todo: don't need to install a certificate that's already present
+	const FindIdentityOutput = await RunShellCommand(`security find-identity -p codesigning -v`);
+	
+	const ExistingSigningCertificate = FindTextAroundString( FindIdentityOutput.StdOut, SigningCertificateName );
+	const FoundSigningCertificate = ExistingSigningCertificate != false;
+	
+	//	if user didn't provide a signing certificate, and we find one, we'll (hopefully) use that
+	const UserProvidedCertificate = GetParam('SigningCertificate_Base64',false)!=false;
+	if ( !UserProvidedCertificate )
+	{
+		if ( FoundSigningCertificate )
+		{
+			console.log(`Found existing signing certificate for ${SigningCertificateName}... ${ExistingSigningCertificate}`);
+			return;
+		}
+	}
+	
+	//	Apple Distribution
+	console.log(FindIdentityOutput.StdOut);
+
+	console.log(`Installing signing certificate(for ${SigningCertificateName})...`);
+	const SigningCertificateFilename = `./SigningCertificate.cer`;
+	const SigningCertificateContents = await DecodeBase64Param('SigningCertificate_Base64');
+	//await WriteFile(ProvisioningProfileFilename,ProvisioningProfileContents);
+	throw `install certificate`;
+}
+
+//	specified macos here as we insert entitlements
+async function CodeSignMacosApp(AppFilename)
 {
 	//	https://developer.apple.com/forums/thread/129980 "--deep considered harmful"
-	console.log(`[re-]sign dylibs inside, without entitlements...`)
-	await RunShellCommand(`codesign --force --sign "${SigningCertificateName}" --deep ${AppFilename}`);
+	console.log(`[re-]sign dylibs inside, without entitlements...`);
+	//	gr: need to keep stuff in quotes in one arg
+	const CodesignDylibsArgs =
+	[
+		`codesign`,
+		`--force`,
+		`--sign`,
+		SigningCertificateName,
+		`--deep`,
+		AppFilename,
+	];
+	await RunShellCommand(CodesignDylibsArgs);
 
 	const EntitlementsFilename = await GetEntitlementsFilename(AppFilename);
 	console.log(`re-sign app only & embed entitlements...`);
-	await RunShellCommand(`codesign --force --entitlements ${EntitlementsFilename} --sign "${SigningCertificateName}" ${AppFilename}`);
+	const CodesignAppArgs =
+	[
+		`codesign`,
+		`--force`,
+		`--entitlements`,
+		EntitlementsFilename,
+		`--sign`,
+		SigningCertificateName,
+		AppFilename,
+	];
+	await RunShellCommand(CodesignAppArgs);
 
 	//	gr: codesign -d --entitlements :- Studio5.app/Contents/Frameworks/UnityPlayer.dylib should list NO ENTITLEMENTS
 	//	gr: codesign -d --entitlements :- Studio5.app SHOULD have entitlements
@@ -287,7 +339,7 @@ async function PackageApp(AppFilename)
 	//	eg. AA1A111A1
 	//	unfortunately cant use "3rd Party Mac Developer Installer"
 	//	but, the ID of the certificate gets matched when it's the team ID!
-	const SignPackage = GetParam("SignPackage",false);
+	const SignPackage = GetParam("SignPackage",true);
 	if ( !SignPackage )
 	{
 		return PackageFilename;
@@ -322,7 +374,10 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 	const ApiKey = GetParam('AppStoreConnect_Auth_Key');
 	const ApiIssuer = GetParam('AppStoreConnect_Auth_Issuer');
 
-	console.log(`Validate final package for upload...`);
+	if ( VerifyOnly )
+		console.log(`Validate final package  ${ArchiveFilename} for upload...`);
+	else
+		console.log(`Uploading package ${ArchiveFilename}...`);
 
 	//	gr: this process has a LOT of output
 	//		so catch it and try and find all errors
@@ -337,19 +392,7 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 		//	todo: handle multiple "error" in one line
 		function ExtractErrorMessage(Line)
 		{
-			let ErrorStart = Line.search(ErrorKeyword);
-			if ( ErrorStart < 0 )
-				return null;
-			ErrorStart = Math.max( 0, ErrorStart-6 );
-			let ErrorLine = Line.substr( ErrorStart );
-
-			//	stop at . or linefeed if it exists
-			let ErrorEnd = ErrorLine.search('\n');
-			if ( ErrorEnd > 0 )
-				ErrorLine = ErrorLine.substr( 0, ErrorEnd );
-			//	cap regardless
-			ErrorLine = ErrorLine.substr( 0, 300 );
-			return ErrorLine;
+			return FindTextAroundString( Line, ErrorKeyword, 6, 300 );
 		}
 
 		let ErrorLines = RunResult.StdErr.join("\n");
@@ -360,6 +403,10 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 		console.error(`Error messages found...\n${ErrorLines.join("\n")}`);
 		throw `${Function} failed with exit code ${RunResult.ExitCode}`;
 	}
+	
+	//	output the resulting info
+	console.log(`${Function} succeeded; ${RunResult.StdOut}`);
+	console.log(`stderr: ${RunResult.StdErr}`);
 }
 
 async function VerifyArchive(ArchiveFilename)
@@ -372,19 +419,20 @@ async function run()
 {
 	//	grab required params
 	const AppFilename = GetParam('AppFilename');
-	const SignApp = GetParam('SignApp',false);
 	const TestFlightPlatform = GetParam('TestFlightPlatform');
 	
 	let ArchiveFilename = AppFilename;
 	
 	if ( TestFlightPlatform == PlatformMacos )
 	{
+		const SignApp = GetParam('SignApp',true);
 		//	gr: needs to be nuanced than this i think
 		//		but it will always need to be packaged for upload
 		if ( SignApp )
 		{
-			await ModifyMacApp(AppFilename);
-			await SignApp(AppFilename);
+			await ModifyMacAppForTestFlightAndStore(AppFilename);
+			await InstallSigningCertificate();
+			await CodeSignMacosApp(AppFilename);
 		}
 
 		const PackageFilename = await PackageApp(AppFilename);
@@ -392,8 +440,13 @@ async function run()
 	}
 	
 	await VerifyArchive(ArchiveFilename);
-	//	make an option to verify only
-	//await UploadArchive(ArchiveFilename);
+				
+	//	by default we upload, but user can avoid it
+	const DoUpload = GetParam('Upload',true);
+	if ( DoUpload )
+	{
+		await UploadArchive(ArchiveFilename);
+	}
 }
 
 //  if this throws, set a github action error

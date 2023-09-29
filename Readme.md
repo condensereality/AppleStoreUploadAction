@@ -10,8 +10,20 @@ These inputs apply to the commandline (Prefixed with `--`) as well as the action
 - `AppStoreConnect_Auth_Issuer` Issuer from appstore connect (same page!) - a long hex guid `aaaaaaaa-bbbb-aaaa-dddd-12345678901`
 
 Mac [app store] Specific
-- `SignPackage=true` this will sign the package with an installer certificate. The certificate is found internally by matching the team id.
-- `TeamIdentifier=AA1A111A1` Your team identifier (find this in any of your certificates in `Keychain access`)
+- `SignApp=true` (defaulted to true) will 
+- `SignPackage=true` (defaulted to `true`) this will sign the package with an installer certificate. The certificate is found internally by matching the team id.
+- `TeamIdentifier=AA1A111A1` Your team identifier (find this in any of your certificates next to your team name envin `Keychain access`, or in AppStoreConnect)
+- `SigningCertificate_Base64` env or input should be a base64 encoded version of your `Apple Distribution` signing certificate
+	- `base64 -i ./AppleDistribution.cer > AppleDistribution.cer.base64.txt`
+	- Copy this base64 data into a secret and pass into action
+	- or testing locally
+	- `export SigningCertificate_Base64=$(base64 -i ./AppleDistribution.cer)`
+- `ProvisioningProfile_Base64` env or input should be a base64 encoded version of your `embedded.provisionprofile` that will be inserted into your .app to allow testflight to be used(provisioned)
+	- `base64 -i ./embedded.provisionprofile > embedded.provisionprofile.base64.txt`
+	- Copy this base64 data into a secret and pass into action
+	- or testing locally
+	- `export ProvisioningProfile_Base64=$(base64 -i ./embedded.provisionprofile)`
+
 
 Local Testing
 -----------------
