@@ -23,6 +23,25 @@ async function DecodeBase64Param(Param)
 }
 
 
+//	returns false if not found
+function FindTextAroundString(Haystack,Needle,CharsBefore=10,CharsAfter=90)
+{
+	const FoundPosition = Haystack.search(Needle);
+	if ( FoundPosition < 0 )
+		return false;
+	
+	const TextStart = Math.max( 0, FoundPosition-CharsBefore );
+	let TextLine = Haystack.substr( TextStart );
+
+	//	stop at . or linefeed if it exists
+	let TextEnd = TextLine.search('\n');
+	if ( TextEnd > 0 )
+		TextLine = TextLine.substr( 0, TextEnd );
+	//	cap regardless
+	TextLine = TextLine.substr( 0, CharsAfter );
+	return TextLine;
+}
+
 function CreatePromise()
 {
 	let Prom = {};
@@ -221,8 +240,8 @@ async function GetEntitlementsFilename(AppFilename)
 	
 	//	gr: can we extract team identifier from plist?
 	const TeamIdentifier = GetParam('TeamIdentifier');
-	const GetAppBundleId = await GetAppBundleId(AppFilename);
-	const ApplicationIdentifier = `${TeamIdentifier}.${GetAppBundleId}`;
+	const AppBundleId = await GetAppBundleId(AppFilename);
+	const ApplicationIdentifier = `${TeamIdentifier}.${AppBundleId}`;
 
 	//	generate entitlements file properly (using tools instead of putting in raw xml)
 	await RunShellCommand(`plutil -create xml1 ${Filename}`);
