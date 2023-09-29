@@ -132,28 +132,86 @@ async function WriteFile(Filename,Contents)
 	await FileSystem.writeFile( Filename, Contents );
 }
 
+
+function EscapePlistKey(Key)
+{
+	//	keys need to have .'s escaped
+	//	https://apple.stackexchange.com/a/434727/75048
+	Key = Key.split('.').join('\\.');
+	//	gr: don't put these in quotes, because they appear in the plist in quotes!
+	return `${Key}`;
+}
+
+async function ReadPlistKey(PlistFilename,Key,Type='string')
+{
+	//	errors with "CFBundleIdentifier"
+	//	maybe if not escaped, or no .'s, then dont put in quotes
+	//Key = EscapePlistKey(Key);
+	const Command =
+	[
+		`plutil`,
+		`-extract`,
+		Key,
+		`raw`,
+		`-expect`,
+		Type,
+		PlistFilename
+	];
+	const Result = await RunShellCommand(Command);
+	return Result.StdOut;
+}
+
 async function WritePlistChange(PlistFilename,Key,Type,Value)
 {
-	const Command = `plutil -replace ${Key} -${Type} ${Value} ${PlistFilename}`;
+	Key = EscapePlistKey(Key);
+	const Command =
+	[
+		`plutil`,
+		`-replace`,
+		Key,
+		`-${Type}`,
+		Value,
+		PlistFilename
+	];
 	await RunShellCommand(Command);
 }
 
-async function ModifyMacApp(AppFilename)
+async function ModifyMacAppForTestFlightAndStore(AppFilename)
 {
 	const PlistFilename = `${AppFilename}/Contents/Info.plist`;
 	console.log("Set info.plist to say there are no prohibited encryption methods...");
 	await WritePlistChange(PlistFilename,'ITSAppUsesNonExemptEncryption','bool','NO');
 	
+	//	testflight will not allow you to release a build to external testers if it considers it built with a "beta" xcode
+	console.log(`Writing "non-beta-xcode" keys to info.plist...`);
+	//	a beta xcode is also detected if it has NO xcode meta!
+	//	so force it in (gr: could check if its present first)
+	//	gr: these values generated from a new empty xcode project, september 2023.
+	//		they will probably need updating in future
+	await WritePlistChange(PlistFilename,'DTXcode','string','1430');
+	await WritePlistChange(PlistFilename,'DTXcodeBuild','string','14E222b');
+	await WritePlistChange(PlistFilename,'DTPlatformVersion','string','13.3');
+	await WritePlistChange(PlistFilename,'DTSDKBuild','string','22E245');
+	
+	//	the above is all that's required for "not beta", but without the following, not all entitlements work! (network client code would get blocked)
+	await WritePlistChange(PlistFilename,'DTCompiler','string','com.apple.compilers.llvm.clang.1_0');
+	await WritePlistChange(PlistFilename,'DTPlatformBuild','string','');
+	await WritePlistChange(PlistFilename,'DTPlatformName','string','macosx');
+	await WritePlistChange(PlistFilename,'DTSDKName','string','macosx13.3');
+
 	console.log("Copy provisioning profile into app...");
 	const ProvisioningProfileFilename = `${AppFilename}/Contents/embedded.provisionprofile`;
 	const ProvisioningProfileContents = await DecodeBase64Param('ProvisioningProfile_Base64');
 	await WriteFile(ProvisioningProfileFilename,ProvisioningProfileContents);
 }
 
+
 async function GetAppBundleId(AppFilename)
 {
 	//	read bundle id from plist
-	throw `Get bundle id from app plist`;
+	const PlistFilename = `${AppFilename}/Contents/Info.plist`;
+	const BundleId = await ReadPlistKey( PlistFilename, 'CFBundleIdentifier' );
+	return BundleId;
 }
 
 //	this may be provided by user in future
