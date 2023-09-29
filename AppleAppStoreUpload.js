@@ -209,6 +209,13 @@ async function ModifyMacAppForTestFlightAndStore(AppFilename)
 	console.log("Set info.plist to say there are no prohibited encryption methods...");
 	await WritePlistChange(PlistFilename,'ITSAppUsesNonExemptEncryption','bool','NO');
 	
+	const BundleVersion = GetParam('BundleVersion',false);
+	if ( BundleVersion !== false )
+	{
+		console.log(`Writing new Bundle version ${BundleVersion}...`);
+		await WritePlistChange(PlistFilename,'CFBundleVersion','string',BundleVersion);
+	}
+	
 	//	testflight will not allow you to release a build to external testers if it considers it built with a "beta" xcode
 	console.log(`Writing "non-beta-xcode" keys to info.plist...`);
 	//	a beta xcode is also detected if it has NO xcode meta!
