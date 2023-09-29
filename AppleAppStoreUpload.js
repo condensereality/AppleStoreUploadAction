@@ -19,7 +19,15 @@ const SigningCertificateName = `Apple Distribution`;
 async function DecodeBase64Param(Param)
 {
 	const Value64 = GetParam(Param);
-	throw `todo: Decode ${Param}`;
+	
+	//	gr: javascript's btoa and the unix tool base64 have differing encodings (javascript decodes to ascii, not unicode)
+	//	gr: https://stackoverflow.com/questions/30106476/using-javascripts-atob-to-decode-base64-doesnt-properly-decode-utf-8-strings
+	//const ValueBinary = atob(Value64);
+	//	node's version is okay
+	//	other backup: use shell base64 to decode back
+	const ValueBinary = new Buffer(Value64, 'base64');
+	
+	return ValueBinary;
 }
 
 
