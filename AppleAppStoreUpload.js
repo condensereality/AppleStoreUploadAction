@@ -393,19 +393,19 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 	
 	if ( RunResult.ExitCode != 0 )
 	{
-		//	some giant stderr lines (json) so join all together, then split again to get individual lines
 		const ErrorKeyword = 'rror';
 
 		//	todo: handle multiple "error" in one line
 		function ExtractErrorMessage(Line)
 		{
-			return FindTextAroundString( Line, ErrorKeyword, 6, 300 );
+			return FindTextAroundString( Line, ErrorKeyword, 10, 300 );
 		}
 
+		//	some giant stderr lines (json) so join all together, then split again to get individual lines
 		let ErrorLines = RunResult.StdErr.join("\n");
 		ErrorLines = ErrorLines.split("\n");
 		ErrorLines = ErrorLines.map( ExtractErrorMessage );
-		ErrorLines = ErrorLines.filter( e => e!=null );
+		ErrorLines = ErrorLines.filter( e => e!=false );
 
 		console.error(`Error messages found...\n${ErrorLines.join("\n")}`);
 		throw `${Function} failed with exit code ${RunResult.ExitCode}`;
