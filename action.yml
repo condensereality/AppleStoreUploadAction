@@ -4,17 +4,19 @@ inputs:
   required: true
   type: string
   description: "Artifact filename ios.ipa or mac.app"
+ Upload:
+  required: true
+  description: "Actually upload, if false, will just verify package"
  SignApp: # re-sign application with certificate and inject entitlements. This is for macos at the moment, but will probably expand to be ios compatible too
+  required: true
+  type: boolean
+ SignPackage:
   required: true
   type: boolean
  TeamIdentifier:
   required: true
   type: string
   description: "ABCDEF09 Apple team ID for inserting into Entitlements (found in AppStore connect or signing certificates in keychain)"
- InstallerCertificateId:
-  required: true
-  type: string
-  description: "ABCDEF09 Id of installer certificate (found in keychain)"
  TestFlightPlatform:
   required: true
   type: choice
@@ -22,6 +24,10 @@ inputs:
     - "macos"
     - "ios"
     - "tvos"
+ BundleVersion:
+  required: false
+  type: number
+  description: "Update CFBundleId (build version of app version) in Info.Plist to allow a new version to upload"
 
 secrets:
  AppStoreConnect_Auth_Key:

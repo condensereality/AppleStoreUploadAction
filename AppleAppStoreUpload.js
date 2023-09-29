@@ -3,6 +3,7 @@ import * as github from "@actions/github"
 import * as artifact from "@actions/artifact"
 import * as os from "os"
 import * as FileSystem from "fs/promises"
+import * as Path from "path"
 import { spawn } from "child_process";
 //import * as Url from "url"
 
@@ -156,6 +157,14 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 async function WriteFile(Filename,Contents)
 {
 	console.log(`WriteFile(${Filename}, ${typeof Contents}`);
+	
+	//	make directory
+	const FileDir = Path.dirname(Filename);
+	//if ( !await FileSystem.exists(FileDir) )
+	{
+		await FileSystem.mkdir( FileDir, { recursive: true });
+	}
+	
 	await FileSystem.writeFile( Filename, Contents );
 }
 
@@ -393,6 +402,20 @@ async function PackageApp(AppFilename)
 }
 
 
+async function InstallAppStoreConnectAuth()
+{
+	const AuthKey = GetParam('AppStoreConnect_Auth_Key');
+	
+	//	gr: probably shouldn't install to cwd...
+	//	gr: this file is explicitl AuthKey_KeyId
+	const AuthKeyFilename = `./private_keys/AuthKey_${AuthKey}.p8`;
+	console.log(`Decoding .p8 auth file to ${AuthKeyFilename}...`);
+
+	const AuthKeyContents = await DecodeBase64Param('AppStoreConnect_Auth_P8_Base64');
+	await WriteFile(AuthKeyFilename,AuthKeyContents);
+}
+
+
 async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 {
 	const Function = VerifyOnly ? `validate-app` : `upload-app`;
@@ -478,6 +501,7 @@ async function run()
 		ArchiveFilename = PackageFilename;
 	}
 	
+	await InstallAppStoreConnectAuth();
 	await VerifyArchive(ArchiveFilename);
 				
 	//	by default we upload, but user can avoid it

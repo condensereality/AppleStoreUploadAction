@@ -5,10 +5,15 @@ Inputs
 ------------
 These inputs apply to the commandline (Prefixed with `--`) as well as the action, or can be put in environment variables
 - `AppFilename` path to app (`Mac.App`) or ios archive (`ios.ipa`)
+- `Upload=true` defaulted to true, set to false to only do a verify
 - `TestFlightPlatform` `macos``ios``tvos`
 - `AppStoreConnect_Auth_Key` An Auth Key from app store connect, like `1234A5B6CD`
 - `AppStoreConnect_Auth_Issuer` Issuer from appstore connect (same page!) - a long hex guid `aaaaaaaa-bbbb-aaaa-dddd-12345678901`
-- `Upload=true` defaulted to true, set to false to only do a verify
+- `AppStoreConnect_Auth_P8_Base64` `.p8` file from AppStoreConnect encoded to base64
+	- `base64 -i ./AuthKey.p8 > AuthKey.p8.base64.txt`
+	- Copy this base64 data into a secret and pass into action
+	- or testing locally
+	- `export AppStoreConnect_Auth_P8_Base64=$(base64 -i ./AuthKey.p8)`
 	
 Mac [app store] Specific
 - `SignApp=true` (defaulted to true) will re-sign internal `.dylibs` and `.frameworks`, insert entitlements, modify `info.plist` with required keys and re-sign app. 
