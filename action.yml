@@ -19,11 +19,12 @@ inputs:
   description: "ABCDEF09 Apple team ID for inserting into Entitlements (found in AppStore connect or signing certificates in keychain)"
  TestFlightPlatform:
   required: true
-  type: choice
-   options:
-    - "macos"
-    - "ios"
-    - "tvos"
+  type: string # can't have choices here
+  #type: choice
+  # options:
+  #  - "macos"
+  #  - "ios"
+  #  - "tvos"
  BundleVersion:
   required: false
   type: number
