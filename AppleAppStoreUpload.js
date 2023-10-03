@@ -437,8 +437,14 @@ async function InstallSigningCertificate()
 		//	so all certificates will be not-trusted (and invalid for code signing)
 		//	so install the apple csa
 		//fetch
+		const Response = await fetch(AppleCertificateAuthorityUrl);
+		if ( !Response.ok )
+			throw `Failed to download AppleCertificateAuthority certificate ${AppleCertificateAuthorityUrl}; ${Response.status}`;
+		let AppleCsaContents = await Response.arrayBuffer();
+		AppleCsaContents = Buffer.from(AppleCsaContents);
 		//https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
 		const AppleCsaFilename = `./AppleWWDRCAG3.cer`;
+		await WriteFile(AppleCsaFilename,AppleCsaContents);
 		console.log(`Installing Apple CSA certificate ${AppleCsaFilename} to ${Keychain?Keychain.Name:null}...`);
 		await InstallCertificateFile( AppleCsaFilename, Keychain );
 	}
