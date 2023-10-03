@@ -285,7 +285,7 @@ async function GetEntitlementsFilename(AppFilename)
 
 async function FindSigningIdentity()
 {
-	console.log(`Listing existing identities for codesigning...`);
+	console.log(`Listing identities for codesigning...`);
 	//	todo: don't need to install a certificate that's already present
 	const FindIdentityOutput = await RunShellCommand(`security find-identity -p codesigning -v`);
 	
@@ -299,6 +299,8 @@ async function FindSigningIdentity()
 
 async function InstallSigningCertificate()
 {
+	const ExistingSigningCertificate = await FindSigningIdentity();
+
 	//	if user didn't provide a signing certificate, and we find one, we'll (hopefully) use that
 	const UserProvidedCertificate = GetParam('SigningCertificate_Base64',false)!=false;
 	if ( !UserProvidedCertificate )
@@ -310,12 +312,13 @@ async function InstallSigningCertificate()
 		}
 	}
 	
-	console.log(`Installing signing certificate(for ${SigningCertificateName})...`);
+	console.log(`Creating signing certificate file to install(for ${SigningCertificateName})...`);
 	const SigningCertificatePassword = GetParam('SigningCertificate_Password');
 	const SigningCertificateFilename = `./SigningCertificate.cer.p12`;
 	const SigningCertificateContents = await DecodeBase64Param('SigningCertificate_Base64');
 	await WriteFile(SigningCertificateFilename,SigningCertificateContents);
 	
+	console.log(`Installing signing certificate(for ${SigningCertificateName})...`);
 	//	todo: install to temporary keychain
 	//	todo: more secure
 	//		-x  Specify that private keys are non-extractable after being imported
@@ -336,6 +339,7 @@ async function InstallSigningCertificate()
 	 `pkcs12`,	//	p12
 	];
 	//set -o pipefail && security import ${{ env.CertificateFilePath }} -P "${{ secrets.AppSigningCertificate_Password }}" -A -t cert -f pkcs12
+	await RunShellCommand(InstallCertificateCommand);
 
 	//	re-find identity to make sure it was installed
 	const NewFoundIdentity = await FindSigningIdentity();
