@@ -46,7 +46,7 @@ secrets:
    required: false
 
 runs:
-  using: 'node16'
+  using: 'node20'
   # gr: hack to fail if not running on a mac (with xcode tools)
   pre: 'This action must run on macos runners'
   pre-if: runner.os != 'macos'
