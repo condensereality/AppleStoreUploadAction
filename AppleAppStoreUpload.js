@@ -5,6 +5,7 @@ import * as os from "os"
 import * as FileSystem from "fs/promises"
 import * as Path from "path"
 import { spawn } from "child_process";
+import { exec } from "child_process";
 //import * as Url from "url"
 
 //	no __dirname or __filename in module-js node
@@ -16,6 +17,14 @@ const PlatformMacos = 'macos';
 const PlatformIos = 'ios';
 const PlatformTvos = 'tvos';
 const SigningCertificateName = `Apple Distribution`;
+
+//	gr: ./ instead of just name... makes a difference! It seems to make identities valid!(once CSA is installed)
+const SigningKeychainName = `./SigningKeychain.keychain`;
+//const SigningKeychainName = null;
+const SigningKeychainPassword = `password`;
+
+const AppleCertificateAuthorityUrl = `https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`;
+
 
 async function DecodeBase64Param(Param)
 {
@@ -81,8 +90,6 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 	const Exe = ExeAndArguments.shift();
 	const Arguments = ExeAndArguments;
 	
-	//console.log(`Running process [${Exe}], args=${Arguments}...`);
-	const Process = spawn( Exe, Arguments );
 	
 	//	promise throws or returns exit code
 	const ProcessPromise = CreatePromise();
@@ -116,12 +123,34 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 			
 		ProcessPromise.Resolve(ExitCode);
 	}
+	
+	//	spawn() creates a new process
+	//	exec() runs in same process/shell (so security-unlock states remain!)
+	/*
+	//console.log(`Running process [${Exe}], args=${Arguments}...`);
+	//	shell breaks arguments, not getting passed to the exe...
+	//const Process = spawn( Exe, Arguments, {shell:true} );
+	const Process = spawn( Exe, Arguments );
+
 	Process.on('error',OnError);
 	Process.stdout.on('data',OnStdOut);
 	Process.stderr.on('data',OnStdErr);
 	Process.on("close",OnProcessExit);
-
+*/
+	{
+		function OnExecFinished(exit,out,err)
+		{
+			//console.log(`OnExecFinished(${exit},${out},${err})`);
+			OnStdOut(out);
+			OnStdErr(err);
+			ProcessPromise.Resolve(exit||0);
+		}
+		const Cmd = `${Exe} ${Arguments.join(' ')}`;
+		exec( Cmd, OnExecFinished );
+	}
 	const ExitCode = await ProcessPromise;
+
+	
 	if ( ExitCode != 0 )
 	{
 		const ReportStdError = StdErr.join(`\n`);
@@ -238,7 +267,7 @@ async function ModifyMacAppForTestFlightAndStore(AppFilename)
 	
 	//	the above is all that's required for "not beta", but without the following, not all entitlements work! (network client code would get blocked)
 	await WritePlistChange(PlistFilename,'DTCompiler','string','com.apple.compilers.llvm.clang.1_0');
-	await WritePlistChange(PlistFilename,'DTPlatformBuild','string','');
+	await WritePlistChange(PlistFilename,'DTPlatformBuild','string','""');
 	await WritePlistChange(PlistFilename,'DTPlatformName','string','macosx');
 	await WritePlistChange(PlistFilename,'DTSDKName','string','macosx13.3');
 
@@ -283,12 +312,14 @@ async function GetEntitlementsFilename(AppFilename)
 }
 
 
-async function FindSigningIdentity()
+async function FindSigningIdentity(KeychainName)
 {
 	console.log(`Listing identities for codesigning...`);
 	//	todo: don't need to install a certificate that's already present
-	const FindIdentityOutput = await RunShellCommand(`security find-identity -p codesigning -v`);
-	
+	//	-v to only show valid (without, shows invalid too)
+	//const FindIdentityOutput = await RunShellCommand(`security find-identity -p codesigning ${KeychainName}`);
+	const FindIdentityOutput = await RunShellCommand(`security find-identity ${KeychainName}`);
+
 	const ExistingSigningCertificate = FindTextAroundString( FindIdentityOutput.StdOut, SigningCertificateName );
 
 	//	Apple Distribution
@@ -297,9 +328,90 @@ async function FindSigningIdentity()
 	return ExistingSigningCertificate;
 }
 
+//	return name of keychain
+async function CreateKeychain(KeychainName,KeychainPassword)
+{
+	if ( !KeychainName )
+		return null;
+	
+	//	delete old keychain
+	try
+	{
+		console.log(`Deleting old security keychain ${KeychainName}`);
+		await RunShellCommand(`security delete-keychain ${KeychainName}`);
+	}
+	catch(e)
+	{
+		console.log(`Error deleting old keychain; ${e}`);
+	}
+	
+	
+	//	create a keychain
+	console.log(`Creating keychain ${KeychainName}...`);
+	const CreateKeychain =
+	[
+	 `security`,
+	 `create-keychain`,
+	 `-p`,
+	 KeychainPassword,
+	 KeychainName
+	];
+	await RunShellCommand(CreateKeychain);
+	
+	const Meta = {};
+	Meta.Name = KeychainName;
+	Meta.Password = KeychainPassword;
+	return Meta;
+}
+
+
+async function InstallCertificateFile(Filename,Keychain,CertificatePassword)
+{
+	//		-x  Specify that private keys are non-extractable after being imported
+	//		-A allows any app to use this certificate (insecure)
+	//	only short hand input args work! (dont believe the --help)
+	//	filenames error if in quotes
+	const InstallCertificateCommand =
+	[
+	 `security`,
+	 `import`,
+	 Filename,
+	 `-T`,	//	instead of -A ll, allow specific access
+	 `/usr/bin/codesign`,
+	 `-t`,	//	type (cert)
+	 `cert`,
+	 `-A`,	//	Allow any app to use certificate
+	];
+	if ( CertificatePassword )
+	{
+		//	gr: format prompts for password, even for apple one. do we need it?
+		//	-format p12
+		InstallCertificateCommand.push(`-f`,`pkcs12`);
+		InstallCertificateCommand.push( `-P`, CertificatePassword );
+	}
+	
+	if ( Keychain )
+	{
+		InstallCertificateCommand.push(`-k`,Keychain.Name);
+	}
+	
+	//set -o pipefail && security import ${{ env.CertificateFilePath }} -P "${{ secrets.AppSigningCertificate_Password }}" -A -t cert -f pkcs12
+	console.log( InstallCertificateCommand.join(` `) );
+	await RunShellCommand(InstallCertificateCommand);
+}
+
+
 async function InstallSigningCertificate()
 {
-	const ExistingSigningCertificate = await FindSigningIdentity();
+	const Keychain = await CreateKeychain(SigningKeychainName,SigningKeychainPassword);
+	
+	//	gr: this (unlock) seems to help things being valid
+	if ( Keychain )
+	{
+		await SwitchKeychain( Keychain.Name, Keychain.Password );
+	}
+	
+	const ExistingSigningCertificate = await FindSigningIdentity(Keychain?Keychain.Name:null);
 
 	//	if user didn't provide a signing certificate, and we find one, we'll (hopefully) use that
 	const UserProvidedCertificate = GetParam('SigningCertificate_Base64',false)!=false;
@@ -312,70 +424,131 @@ async function InstallSigningCertificate()
 		}
 	}
 	
+	//	gr; not sure why this errors when instlaling to default keychain
+	if ( Keychain )
+	{
+		//	if we've made a new keychain, it'll be missing a certificate authority
+		//	so all certificates will be not-trusted (and invalid for code signing)
+		//	so install the apple csa
+		//fetch
+		//https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+		const AppleCsaFilename = `./AppleWWDRCAG3.cer`;
+		console.log(`Installing Apple CSA certificate ${AppleCsaFilename} to ${Keychain?Keychain.Name:null}...`);
+		await InstallCertificateFile( AppleCsaFilename, Keychain );
+	}
+	
 	console.log(`Creating signing certificate file to install(for ${SigningCertificateName})...`);
 	const SigningCertificatePassword = GetParam('SigningCertificate_Password');
 	const SigningCertificateFilename = `./SigningCertificate.cer.p12`;
 	const SigningCertificateContents = await DecodeBase64Param('SigningCertificate_Base64');
 	await WriteFile(SigningCertificateFilename,SigningCertificateContents);
 	
-	console.log(`Installing signing certificate(for ${SigningCertificateName})...`);
-	//	todo: install to temporary keychain
-	//	todo: more secure
-	//		-x  Specify that private keys are non-extractable after being imported
-	//		-A allows any app to use this certificate (insecure)
-	//	only short hand input args work! (dont believe the --help)
-	//	filenames error if in quotes
-	const InstallCertificateCommand =
-	[
-	 `security`,
-	 `import`,
-	 SigningCertificateFilename,
-	 `-P`,
-	 SigningCertificatePassword,
-	 `-A`,	//	Allow any app to use certificate
-	 `-t`,	//	type (cert)
-	 `cert`,
-	 `-f`,		//	format
-	 `pkcs12`,	//	p12
-	];
-	//set -o pipefail && security import ${{ env.CertificateFilePath }} -P "${{ secrets.AppSigningCertificate_Password }}" -A -t cert -f pkcs12
-	await RunShellCommand(InstallCertificateCommand);
+	console.log(`Installing signing certificate(for ${SigningCertificateName} to ${Keychain?Keychain.Name:null})...`);
+	await InstallCertificateFile( SigningCertificateFilename, Keychain, SigningCertificatePassword );
 
 	//	re-find identity to make sure it was installed
-	const NewFoundIdentity = await FindSigningIdentity();
+	const NewFoundIdentity = await FindSigningIdentity(Keychain?Keychain.Name:null);
 	console.log(`Post-install certificate found; ${NewFoundIdentity}`);
+	
+	const SigningMeta = {};
+	if ( Keychain )
+	{
+		SigningMeta.KeychainName = Keychain.Name;
+		SigningMeta.KeychainPassword = Keychain.Password;
+	}
+	return SigningMeta;
+}
+
+async function SwitchKeychain(KeychainName,KeychainPassword)
+{
+	const ListOutput = await RunShellCommand(`security list-keychains -s ${KeychainName}`);
+	console.log(ListOutput.StdOut||ListOutput.StdErr);
+
+	//	gr: dont set default, but unlock
+	//console.log(`Switching default keychain to ${KeychainName}...`);
+	//const SetDefaultOutput = await RunShellCommand(`security default-keychain -s ${KeychainName}`);
+	//console.log(SetDefaultOutput.StdOut||SetDefaultOutput.StdErr);
+
+	//	unlocking keychain makes it appear in KeyChain Access!
+	//	gr: unlocking keychain with wrong password, gives no error
+	console.log(`Unlocking keychain ${KeychainName} with [${KeychainPassword}]...`);
+	const UnlockOutput = await RunShellCommand(`security unlock-keychain -p ${KeychainPassword} ${KeychainName}`);
+	console.log(UnlockOutput.StdOut||UnlockOutput.StdErr);
+
+	//	https://developer.apple.com/forums/thread/712005
+	//	Finally, modify set the partition list to allow access by Apple code:
+	//	security set-key-partition-list -S "apple:" -l "Apple Distribution: …"
+
+	//	https://github.com/NewChromantics/import-signing-certificate/blob/main/index.js
+	//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${KeychainPassword} ${KeychainName}`);
+	//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S "apple:" -l "${SigningCertificateName}" -k ${KeychainPassword} ${KeychainName}`);
+
+
+	//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${KeychainPassword} ${KeychainName}`);
+	//console.log(SetKeyPartitionOutput.StdOut||SetKeyPartitionOutput.StdErr);
+}
+
+async function Yield(ms)
+{
+	const Prom = new Promise( resolve => setTimeout( resolve, ms ) );
+	await Prom;
 }
 
 //	specified macos here as we insert entitlements
-async function CodeSignMacosApp(AppFilename)
+async function CodeSignMacosApp(AppFilename,SigningMeta)
 {
-	//	https://developer.apple.com/forums/thread/129980 "--deep considered harmful"
-	console.log(`[re-]sign dylibs inside, without entitlements...`);
-	//	gr: need to keep stuff in quotes in one arg
-	const CodesignDylibsArgs =
-	[
-		`codesign`,
-		`--force`,
-		`--sign`,
-		SigningCertificateName,
-		`--deep`,
-		AppFilename,
-	];
-	await RunShellCommand(CodesignDylibsArgs);
-
-	const EntitlementsFilename = await GetEntitlementsFilename(AppFilename);
-	console.log(`re-sign app only & embed entitlements...`);
-	const CodesignAppArgs =
-	[
-		`codesign`,
-		`--force`,
-		`--entitlements`,
-		EntitlementsFilename,
-		`--sign`,
-		SigningCertificateName,
-		AppFilename,
-	];
-	await RunShellCommand(CodesignAppArgs);
+	if ( SigningMeta.KeychainName )
+	{
+		//	unlocking keychain makes it appear in KeyChain Access!
+		await SwitchKeychain( SigningMeta.KeychainName, SigningMeta.KeychainPassword );
+	}
+	
+	
+	try
+	{
+		//await RunShellCommand(`security default-keychain -s ${SigningMeta.KeychainName}`);
+		
+		//	https://developer.apple.com/forums/thread/129980 "--deep considered harmful"
+		console.log(`[re-]sign dylibs inside, without entitlements...`);
+		//	todo: need to make this fail if it requests keychain access/sudo/user prompt
+		const CodesignDylibsArgs =
+		[
+			//`security unlock-keychain -p ${SigningMeta.KeychainPassword} ${SigningMeta.KeychainName} &&`,
+			`codesign`,
+			`--force`,
+			//`--keychain`,
+			//SigningMeta.KeychainName,
+			`--sign`,
+			`"${SigningCertificateName}"`,
+			`--deep`,
+			AppFilename,
+		];
+		await RunShellCommand(CodesignDylibsArgs);
+		
+		console.log(`Generating entitlements file...`);
+		const EntitlementsFilename = await GetEntitlementsFilename(AppFilename);
+		
+		console.log(`re-sign app only & embed entitlements...`);
+		const CodesignAppArgs =
+		[
+			//`set -o pipeline`,	//	gr: we can't insert this everywhere, but it works for codesign, to abort if user prompts appear
+			`codesign`,
+			`--force`,
+			//`--keychain`,
+			//Keychain.Name,
+			`--entitlements`,
+			EntitlementsFilename,
+			`--sign`,
+			SigningCertificateName,
+			AppFilename,
+		];
+		await RunShellCommand(CodesignAppArgs);
+	}
+	finally
+	{
+		//console.log(`Restoring default keychain`);
+		//await RunShellCommand(`security default-keychain -s login.keychain`);
+	}
 
 	//	gr: codesign -d --entitlements :- Studio5.app/Contents/Frameworks/UnityPlayer.dylib should list NO ENTITLEMENTS
 	//	gr: codesign -d --entitlements :- Studio5.app SHOULD have entitlements
@@ -497,8 +670,8 @@ async function run()
 		if ( SignApp )
 		{
 			await ModifyMacAppForTestFlightAndStore(AppFilename);
-			await InstallSigningCertificate();
-			await CodeSignMacosApp(AppFilename);
+			const SigningMeta = await InstallSigningCertificate();
+			await CodeSignMacosApp( AppFilename, SigningMeta );
 		}
 
 		const PackageFilename = await PackageApp(AppFilename);
