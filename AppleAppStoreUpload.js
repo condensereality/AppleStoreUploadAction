@@ -126,27 +126,32 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 	
 	//	spawn() creates a new process
 	//	exec() runs in same process/shell (so security-unlock states remain!)
-	/*
-	//console.log(`Running process [${Exe}], args=${Arguments}...`);
-	//	shell breaks arguments, not getting passed to the exe...
-	//const Process = spawn( Exe, Arguments, {shell:true} );
-	const Process = spawn( Exe, Arguments );
-
-	Process.on('error',OnError);
-	Process.stdout.on('data',OnStdOut);
-	Process.stderr.on('data',OnStdErr);
-	Process.on("close",OnProcessExit);
-*/
+	const NewProcess = false;
+	if ( NewProcess )
 	{
-		function OnExecFinished(exit,out,err)
+		//console.log(`Running process [${Exe}], args=${Arguments}...`);
+		//	shell breaks arguments, not getting passed to the exe...
+		//const Process = spawn( Exe, Arguments, {shell:true} );
+		const Process = spawn( Exe, Arguments );
+		
+		Process.on('error',OnError);
+		Process.stdout.on('data',OnStdOut);
+		Process.stderr.on('data',OnStdErr);
+		Process.on("close",OnProcessExit);
+	}
+	else
+	{
 		{
-			//console.log(`OnExecFinished(${exit},${out},${err})`);
-			OnStdOut(out);
-			OnStdErr(err);
-			ProcessPromise.Resolve(exit||0);
+			function OnExecFinished(exit,out,err)
+			{
+				//console.log(`OnExecFinished(${exit},${out},${err})`);
+				OnStdOut(out);
+				OnStdErr(err);
+				ProcessPromise.Resolve(exit||0);
+			}
+			const Cmd = `${Exe} ${Arguments.join(' ')}`;
+			exec( Cmd, OnExecFinished );
 		}
-		const Cmd = `${Exe} ${Arguments.join(' ')}`;
-		exec( Cmd, OnExecFinished );
 	}
 	const ExitCode = await ProcessPromise;
 
@@ -204,7 +209,8 @@ function EscapePlistKey(Key)
 	//	https://apple.stackexchange.com/a/434727/75048
 	Key = Key.split('.').join('\\.');
 	//	gr: don't put these in quotes, because they appear in the plist in quotes!
-	return `${Key}`;
+	//	gr: need to be in quotes for exec() but not spawn()!
+	return `"${Key}"`;
 }
 
 async function ReadPlistKey(PlistFilename,Key,Type='string')
@@ -387,7 +393,7 @@ async function InstallCertificateFile(Filename,Keychain,CertificatePassword)
 		//	gr: format prompts for password, even for apple one. do we need it?
 		//	-format p12
 		InstallCertificateCommand.push(`-f`,`pkcs12`);
-		InstallCertificateCommand.push( `-P`, CertificatePassword );
+		InstallCertificateCommand.push(`-P`, CertificatePassword );
 	}
 	
 	if ( Keychain )
@@ -459,7 +465,7 @@ async function InstallSigningCertificate()
 	return SigningMeta;
 }
 
-async function SwitchKeychain(KeychainName,KeychainPassword)
+async function SwitchKeychain(KeychainName,KeychainPassword,SetPartition)
 {
 	const ListOutput = await RunShellCommand(`security list-keychains -s ${KeychainName}`);
 	console.log(ListOutput.StdOut||ListOutput.StdErr);
@@ -475,18 +481,22 @@ async function SwitchKeychain(KeychainName,KeychainPassword)
 	const UnlockOutput = await RunShellCommand(`security unlock-keychain -p ${KeychainPassword} ${KeychainName}`);
 	console.log(UnlockOutput.StdOut||UnlockOutput.StdErr);
 
-	//	https://developer.apple.com/forums/thread/712005
-	//	Finally, modify set the partition list to allow access by Apple code:
-	//	security set-key-partition-list -S "apple:" -l "Apple Distribution: …"
-
-	//	https://github.com/NewChromantics/import-signing-certificate/blob/main/index.js
-	//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${KeychainPassword} ${KeychainName}`);
-	//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S "apple:" -l "${SigningCertificateName}" -k ${KeychainPassword} ${KeychainName}`);
-
-
-	//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${KeychainPassword} ${KeychainName}`);
-	//console.log(SetKeyPartitionOutput.StdOut||SetKeyPartitionOutput.StdErr);
-}
+	//	gr: this only works AFTER importing something!
+	if ( SetPartition )
+	{
+		//	https://developer.apple.com/forums/thread/712005
+		//	Finally, modify set the partition list to allow access by Apple code:
+		//	security set-key-partition-list -S "apple:" -l "Apple Distribution: …"
+		
+		//	https://github.com/NewChromantics/import-signing-certificate/blob/main/index.js
+		//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${KeychainPassword} ${KeychainName}`);
+		//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S "apple:" -l "${SigningCertificateName}" -k ${KeychainPassword} ${KeychainName}`);
+		const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KeychainPassword}" "${KeychainName}"`);
+		//	https://stackoverflow.com/questions/39868578/security-codesign-in-sierra-keychain-ignores-access-control-settings-and-ui-p
+		//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${KeychainPassword} ${KeychainName}`);
+		console.log(SetKeyPartitionOutput.StdOut||SetKeyPartitionOutput.StdErr);
+	}
+ }
 
 async function Yield(ms)
 {
@@ -500,9 +510,8 @@ async function CodeSignMacosApp(AppFilename,SigningMeta)
 	if ( SigningMeta.KeychainName )
 	{
 		//	unlocking keychain makes it appear in KeyChain Access!
-		await SwitchKeychain( SigningMeta.KeychainName, SigningMeta.KeychainPassword );
+		await SwitchKeychain( SigningMeta.KeychainName, SigningMeta.KeychainPassword, true );
 	}
-	
 	
 	try
 	{
