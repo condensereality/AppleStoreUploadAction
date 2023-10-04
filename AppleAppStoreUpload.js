@@ -555,8 +555,8 @@ async function CodeSignMacosApp(AppFilename,Keychain)
 			`--force`,
 			//	gr: didn't seem to need keychain on github runner... as there's no ambiguity?
 			//		but can't hurt to be specific
-			`--keychain`,
-			Keychain.Name,
+			Keychain ? `--keychain` : '',
+			Keychain ? Keychain.Name : '',
 			`--sign`,
 			`"${SigningCertificateName}"`,
 			`--deep`,
@@ -573,8 +573,8 @@ async function CodeSignMacosApp(AppFilename,Keychain)
 			//`set -o pipeline`,	//	gr: we can't insert this everywhere, but it works for codesign, to abort if user prompts appear
 			`codesign`,
 			`--force`,
-			`--keychain`,
-			Keychain.Name,
+			Keychain ? `--keychain` : '',
+			Keychain ? Keychain.Name : '',
 			`--entitlements`,
 			EntitlementsFilename,
 			`--sign`,

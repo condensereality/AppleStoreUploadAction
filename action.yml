@@ -38,6 +38,8 @@ secrets:
  AppStoreConnect_Auth_Issuer:
    required: true
  # Certificate for signing app; "Apple Distribution: Company (TeamIdentifier)"
+ # This should be exported to P12 so has a password
+ # todo: rename to SigningCertificate_P12_Base64
  SigningCertificate_Base64:
    required: false
  SigningCertificate_Password:
@@ -45,7 +47,11 @@ secrets:
  ProvisioningProfile_Base64:
    required: false
  # installer to sign .pkg "3rd Party Mac Developer Installer: CompanyName (TeamIdentifier)
- InstallerCertificate_Base64:
+ # This should be exported to P12 so has a password
+ # todo: rename to InstallerCertificate_Base64
+ InstallerCertificate_P12_Base64:
+   required: false
+ InstallerCertificate_Password:
    required: false
 
 runs:
