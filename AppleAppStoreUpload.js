@@ -551,7 +551,8 @@ async function SwitchKeychain(Keychain,SetPartition)
 	const UnlockOutput = await RunShellCommand(`security unlock-keychain -p ${Keychain.Password} ${Keychain.Name}`);
 	console.log(UnlockOutput.StdOut||UnlockOutput.StdErr);
 
-	//	gr: this only works AFTER importing something!
+	//	this applies to *certificates*, not keychains
+	//	so run it AFTER installing a certificate, to unlock it for use in the applications specified
 	if ( SetPartition )
 	{
 		//	https://developer.apple.com/forums/thread/712005
@@ -561,9 +562,11 @@ async function SwitchKeychain(Keychain,SetPartition)
 		//	https://github.com/NewChromantics/import-signing-certificate/blob/main/index.js
 		//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${Keychain.Password} ${Keychain.Name}`);
 		//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S "apple:" -l "${SigningCertificateName}" -k ${Keychain.Password} ${Keychain.Name}`);
-		const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${Keychain.Password}" "${Keychain.Name}"`);
 		//	https://stackoverflow.com/questions/39868578/security-codesign-in-sierra-keychain-ignores-access-control-settings-and-ui-p
 		//const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple: -s -k ${Keychain.Password} ${Keychain.Name}`);
+
+		//	gr: this is working for everything! but leaving the alternatives above
+		const SetKeyPartitionOutput = await RunShellCommand(`security set-key-partition-list -S apple-tool:,apple:,codesign:,productsign: -s -k "${Keychain.Password}" "${Keychain.Name}"`);
 		console.log(SetKeyPartitionOutput.StdOut||SetKeyPartitionOutput.StdErr);
 	}
  }
@@ -653,13 +656,15 @@ async function PackageApp(AppFilename,Keychain)
 	await InstallInstallerAuthorityCertificate(Keychain);
 	await InstallInstallerCertificate(Keychain);
 	
+	//	unlock the keychain (run partition) everytime we install a certificate
+	await SwitchKeychain( Keychain, true );
+	
 	const TeamIdentifier = GetParam('TeamIdentifier');
 	const InstallerCertificateId = TeamIdentifier;
 	
 	const SignedPackageFilename = `${AppFilename}.signed.pkg`;
 	console.log(`Sign .pkg into ${SignedPackageFilename} with ${InstallerCertificateId}(Should have a matching installer certificate)... ${PackageFilename} ${SignedPackageFilename}`);
 	//	gr: this can also take --keychain xx but seems to never work
-	//		despite referencing the correct keychain when it does succeed
 	await RunShellCommand(`productsign --sign ${InstallerCertificateId} ${PackageFilename} ${SignedPackageFilename}`);
 	return SignedPackageFilename;
 }
