@@ -174,24 +174,11 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 			throw `Process exit code ${ExitCode}; stdout=${StdOut} stderr=${ReportStdError}`;
 		//console.warn(`Process exit code ${ExitCode}; stdout=${StdOut} stderr=${ReportStdError}`);
 	}
-	
-	//	turn arrays into something slightly easier to use (a string or null)
-	function GetNiceOutput(OutputData)
-	{
-		if ( OutputData.length == 0 )
-			return null;
-		if ( OutputData.length == 1 )
-			return OutputData[0];
 		
-		//	gr: if it's really long, dont join
-		return OutputData;
-		//return OutputData.join(``);
-	}
-	
 	const Output = {};
 	Output.ExitCode = ExitCode;
-	Output.StdOut = GetNiceOutput(StdOut);
-	Output.StdErr = GetNiceOutput(StdErr);
+	Output.StdOut = StdOut;
+	Output.StdErr = StdErr;
 	
 	//	put stdout together and return it
 	//console.log(`Process output; ${JSON.stringify(Output)}`);
@@ -337,7 +324,7 @@ async function FindSigningIdentity(KeychainName,CertificateName)
 	//const FindIdentityOutput = await RunShellCommand(`security -v find-identity -p codesigning ${KeychainName}`);
 	const FindIdentityOutput = await RunShellCommand(`security -v find-identity ${KeychainName}`);
 
-	const ExistingSigningCertificate = FindTextAroundString( FindIdentityOutput.StdOut, CertificateName );
+	const ExistingSigningCertificate = FindTextAroundString( FindIdentityOutput.StdOut.join(``), CertificateName );
 
 	//	Apple Distribution
 	console.log(FindIdentityOutput.StdOut);
