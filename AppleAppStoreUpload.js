@@ -23,8 +23,18 @@ const InstallerCertificateName = `3rd Party Mac Developer Installer`;
 const SigningKeychainName = `./SigningKeychain.keychain`;
 //const SigningKeychainName = null;
 const SigningKeychainPassword = `password`;
+//	if user doesn't provide Keychain (where they can use false to disable it), it will use this
+const DefaultSigningKeychainName = SigningKeychainName;
 
+//	authority for signing identity
 const AppleCertificateAuthorityUrl = `https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer`;
+
+//	authority for installer identity
+//	https://developer.apple.com/news/?id=5zb13auf#:~:text=Apple%20Developer%20ID%20Intermediate%20Certificate,expires%20on%20September%2016%2C%202031.
+const AppleInstallerCertificateAuthorityUrl = `https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer`;
+
+const AppleRootCertificateAuthorityUrl = `https://www.apple.com/certificateauthority/AppleRootCA-G2.cer`;
+
 
 
 async function DecodeBase64Param(Param)
@@ -324,8 +334,8 @@ async function FindSigningIdentity(KeychainName,CertificateName)
 	console.log(`Listing identities for codesigning...`);
 	//	todo: don't need to install a certificate that's already present
 	//	-v to only show valid (without, shows invalid too)
-	//const FindIdentityOutput = await RunShellCommand(`security find-identity -p codesigning ${KeychainName}`);
-	const FindIdentityOutput = await RunShellCommand(`security find-identity ${KeychainName}`);
+	//const FindIdentityOutput = await RunShellCommand(`security -v find-identity -p codesigning ${KeychainName}`);
+	const FindIdentityOutput = await RunShellCommand(`security -v find-identity ${KeychainName}`);
 
 	const ExistingSigningCertificate = FindTextAroundString( FindIdentityOutput.StdOut, CertificateName );
 
@@ -336,8 +346,11 @@ async function FindSigningIdentity(KeychainName,CertificateName)
 }
 
 //	return name of keychain
-async function CreateKeychain(KeychainName,KeychainPassword)
+async function CreateKeychain()
 {
+	let KeychainName = GetParam('Keychain', DefaultSigningKeychainName );
+	let KeychainPassword = SigningKeychainPassword;
+	
 	if ( !KeychainName )
 		return null;
 	
@@ -410,7 +423,7 @@ async function InstallCertificateFile(Filename,Keychain,CertificatePassword)
 
 async function InstallSigningCertificate()
 {
-	const Keychain = await CreateKeychain(SigningKeychainName,SigningKeychainPassword);
+	const Keychain = await CreateKeychain();
 	
 	//	gr: this (unlock) seems to help things being valid
 	if ( Keychain )
@@ -431,23 +444,10 @@ async function InstallSigningCertificate()
 		}
 	}
 	
-	//	gr; not sure why this errors when instlaling to default keychain
+	//	gr; not sure why this errors when instlaling to default keychain, so only run if we are using a keychain
 	if ( Keychain )
 	{
-		//	if we've made a new keychain, it'll be missing a certificate authority
-		//	so all certificates will be not-trusted (and invalid for code signing)
-		//	so install the apple csa
-		//fetch
-		const Response = await fetch(AppleCertificateAuthorityUrl);
-		if ( !Response.ok )
-			throw `Failed to download AppleCertificateAuthority certificate ${AppleCertificateAuthorityUrl}; ${Response.status}`;
-		let AppleCsaContents = await Response.arrayBuffer();
-		AppleCsaContents = Buffer.from(AppleCsaContents);
-		//https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
-		const AppleCsaFilename = `./AppleWWDRCAG3.cer`;
-		await WriteFile(AppleCsaFilename,AppleCsaContents);
-		console.log(`Installing Apple CSA certificate ${AppleCsaFilename} to ${Keychain?Keychain.Name:null}...`);
-		await InstallCertificateFile( AppleCsaFilename, Keychain );
+		await InstallSigningAuthorityCertificate(Keychain);
 	}
 	
 	console.log(`Creating signing certificate file to install(for ${SigningCertificateName})...`);
@@ -467,10 +467,52 @@ async function InstallSigningCertificate()
 }
 
 
+async function InstallSigningAuthorityCertificate(Keychain)
+{
+	//	if we've made a new keychain, it'll be missing a certificate authority
+	//	so all certificates will be not-trusted (and invalid for code signing)
+	//	so install the apple csa
+	const Response = await fetch(AppleCertificateAuthorityUrl);
+	if ( !Response.ok )
+		throw `Failed to download AppleCertificateAuthority certificate ${AppleCertificateAuthorityUrl}; ${Response.status}`;
+	let AppleCsaContents = await Response.arrayBuffer();
+	AppleCsaContents = Buffer.from(AppleCsaContents);
+	const AppleCsaFilename = `./AppleWWDRCAG3.cer`;
+	await WriteFile(AppleCsaFilename,AppleCsaContents);
+	console.log(`Installing Apple CSA certificate ${AppleCsaFilename} to ${Keychain?Keychain.Name:null}...`);
+	await InstallCertificateFile( AppleCsaFilename, Keychain );
+}
+
+async function InstallInstallerAuthorityCertificate(Keychain)
+{
+	const Response = await fetch(AppleInstallerCertificateAuthorityUrl);
+	if ( !Response.ok )
+		throw `Failed to download AppleInstallerCertificateAuthorityUrl certificate ${AppleCertificateAuthorityUrl}; ${Response.status}`;
+	let AppleCsaContents = await Response.arrayBuffer();
+	AppleCsaContents = Buffer.from(AppleCsaContents);
+	const AppleCsaFilename = `./DeveloperIDG2CA.cer`;
+	await WriteFile(AppleCsaFilename,AppleCsaContents);
+	console.log(`Installing Apple developer g2 CSA certificate ${AppleCsaFilename} to ${Keychain?Keychain.Name:null}...`);
+	await InstallCertificateFile( AppleCsaFilename, Keychain );
+}
+
+async function InstallRootAuthorityCertificate(Keychain)
+{
+	const Response = await fetch(AppleRootCertificateAuthorityUrl);
+	if ( !Response.ok )
+		throw `Failed to download AppleRootCertificateAuthorityUrl certificate ${AppleCertificateAuthorityUrl}; ${Response.status}`;
+	let AppleCsaContents = await Response.arrayBuffer();
+	AppleCsaContents = Buffer.from(AppleCsaContents);
+	const AppleCsaFilename = `./AppleRootCA-G2.cer`;
+	await WriteFile(AppleCsaFilename,AppleCsaContents);
+	console.log(`Installing Apple root certificate ${AppleCsaFilename} to ${Keychain?Keychain.Name:null}...`);
+	await InstallCertificateFile( AppleCsaFilename, Keychain );
+}
+
 async function InstallInstallerCertificate(Keychain)
 {
 	//	if user didn't provide a signing certificate, and we find one, we'll (hopefully) use that
-	const UserProvidedCertificate = GetParam('InstallerCertificate_Base64',false)!=false;
+	const UserProvidedCertificate = GetParam('InstallerCertificate_P12_Base64',false)!=false;
 	/*
 	 if ( !UserProvidedCertificate )
 	 {
@@ -608,6 +650,8 @@ async function PackageApp(AppFilename,Keychain)
 		return PackageFilename;
 	}
 	
+	await InstallRootAuthorityCertificate(Keychain);
+	await InstallInstallerAuthorityCertificate(Keychain);
 	await InstallInstallerCertificate(Keychain);
 	
 	const TeamIdentifier = GetParam('TeamIdentifier');
@@ -615,6 +659,8 @@ async function PackageApp(AppFilename,Keychain)
 	
 	const SignedPackageFilename = `${AppFilename}.signed.pkg`;
 	console.log(`Sign .pkg into ${SignedPackageFilename} with ${InstallerCertificateId}(Should have a matching installer certificate)... ${PackageFilename} ${SignedPackageFilename}`);
+	//	gr: this can also take --keychain xx but seems to never work
+	//		despite referencing the correct keychain when it does succeed
 	await RunShellCommand(`productsign --sign ${InstallerCertificateId} ${PackageFilename} ${SignedPackageFilename}`);
 	return SignedPackageFilename;
 }
