@@ -153,12 +153,23 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 	else
 	{
 		{
-			function OnExecFinished(exit,out,err)
+			function OnExecFinished(exiterror,out,err)
 			{
+				let ExitCode;
+				if ( exiterror == null )
+				{
+					ExitCode = 0;
+				}
+				else
+				{
+					//	gr: exiterror is an instead of Error object
+					//		to keep in sync with spawn() we want to resolve the promise to an error code
+					ExitCode = exiterror.code || 1;
+				}
 				//console.log(`OnExecFinished(${exit},${out},${err})`);
 				OnStdOut(out);
 				OnStdErr(err);
-				ProcessPromise.Resolve(exit||0);
+				ProcessPromise.Resolve(ExitCode);
 			}
 			const Cmd = `${Exe} ${Arguments.join(' ')}`;
 			exec( Cmd, OnExecFinished );
