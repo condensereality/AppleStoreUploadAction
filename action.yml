@@ -37,12 +37,15 @@ secrets:
    required: true
  AppStoreConnect_Auth_Issuer:
    required: true
- # data for signing app
+ # Certificate for signing app; "Apple Distribution: Company (TeamIdentifier)"
  SigningCertificate_Base64:
    required: false
  SigningCertificate_Password:
    required: false
  ProvisioningProfile_Base64:
+   required: false
+ # installer to sign .pkg "3rd Party Mac Developer Installer: CompanyName (TeamIdentifier)
+ InstallerCertificate_Base64:
    required: false
 
 runs:

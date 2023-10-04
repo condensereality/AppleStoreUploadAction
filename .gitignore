@@ -2,3 +2,4 @@
 Entitlements.plist
 private_keys/AuthKey_*.p8
 SigningCertificate.cer.p12
+InstallerCertificate.cer
