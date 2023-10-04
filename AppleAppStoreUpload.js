@@ -523,11 +523,10 @@ async function InstallInstallerCertificate(Keychain)
 	 }
 	 }
 	 */
-	console.log(`Creating install certificate file to install(for ${SigningCertificateName})...`);
-	//const SigningCertificatePassword = GetParam('SigningCertificate_Password');
-	const InstallerCertificatePassword = null;
+	console.log(`Creating install certificate file to install(for ${InstallerCertificateName})...`);
+	const InstallerCertificatePassword = GetParam('InstallerCertificate_Password');
 	const InstallerCertificateFilename = `./InstallerCertificate.cer`;
-	const InstallerCertificateContents = await DecodeBase64Param('InstallerCertificate_Base64');
+	const InstallerCertificateContents = await DecodeBase64Param('InstallerCertificate_P12_Base64');
 	await WriteFile(InstallerCertificateFilename,InstallerCertificateContents);
 	
 	console.log(`Installing installer certificate(for ${InstallerCertificateName} to ${Keychain?Keychain.Name:null})...`);
