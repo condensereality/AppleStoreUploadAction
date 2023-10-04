@@ -39,8 +39,7 @@ secrets:
    required: true
  # Certificate for signing app; "Apple Distribution: Company (TeamIdentifier)"
  # This should be exported to P12 so has a password
- # todo: rename to SigningCertificate_P12_Base64
- SigningCertificate_Base64:
+ SigningCertificate_P12_Base64:
    required: false
  SigningCertificate_Password:
    required: false

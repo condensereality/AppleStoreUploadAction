@@ -434,7 +434,7 @@ async function InstallSigningCertificate()
 	const ExistingSigningCertificate = await FindSigningIdentity(Keychain?Keychain.Name:null, SigningCertificateName);
 
 	//	if user didn't provide a signing certificate, and we find one, we'll (hopefully) use that
-	const UserProvidedCertificate = GetParam('SigningCertificate_Base64',false)!=false;
+	const UserProvidedCertificate = GetParam('SigningCertificate_P12_Base64',false)!=false;
 	if ( !UserProvidedCertificate )
 	{
 		if ( ExistingSigningCertificate )
@@ -453,7 +453,7 @@ async function InstallSigningCertificate()
 	console.log(`Creating signing certificate file to install(for ${SigningCertificateName})...`);
 	const SigningCertificatePassword = GetParam('SigningCertificate_Password');
 	const SigningCertificateFilename = `./SigningCertificate.cer.p12`;
-	const SigningCertificateContents = await DecodeBase64Param('SigningCertificate_Base64');
+	const SigningCertificateContents = await DecodeBase64Param('SigningCertificate_P12_Base64');
 	await WriteFile(SigningCertificateFilename,SigningCertificateContents);
 	
 	console.log(`Installing signing certificate(for ${SigningCertificateName} to ${Keychain?Keychain.Name:null})...`);
