@@ -41,5 +41,5 @@ Local Testing
 node ./AppleAppStoreUpload.js.js `
 	--AppFilename=./Mac.app
 	--SignApp=true
-	--TestFlightPlatform=macos --AppStoreConnect_Auth_Key=6236N3P5KF AppStoreConnect_Auth_Issuer=f3c9dc0e-3cde-4013-9b2f-1dc150f956d0 InstallerCertificateId="9VK6T323P3" SignApp=true
+	--TestFlightPlatform=macos --AppStoreConnect_Auth_Key=1111A1A1AA AppStoreConnect_Auth_Issuer=ffffffff-ffff-ffff-ffff-ffffffffffff InstallerCertificateId="AAAAAAAAAA" SignApp=true
 
