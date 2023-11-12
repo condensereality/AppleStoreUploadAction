@@ -42,5 +42,17 @@ Local Testing
 node ./AppleAppStoreUpload.js `
 	--AppFilename=./Mac.app
 	--SignApp=true
-	--TestFlightPlatform=macos --AppStoreConnect_Auth_Key=1111A1A1AA AppStoreConnect_Auth_Issuer=ffffffff-ffff-ffff-ffff-ffffffffffff InstallerCertificateId="AAAAAAAAAA" SignApp=true
+	--TestFlightPlatform=macos 
+	--AppStoreConnect_Auth_Key=1111A1A1AA AppStoreConnect_Auth_Issuer=ffffffff-ffff-ffff-ffff-ffffffffffff InstallerCertificateId="AAAAAAAAAA"
+```
 
+### For tvos or ios
+If building to an unsigned `.xcarchive`
+- Download Tvos/Ios app store `.mobileprovision` file from `profiles` in https://appstoreconnect.apple.com
+- `export ProvisioningProfile_Base64=$(base64 -i your.mobileprovision)`
+- ```
+node ./AppleAppStoreUpload.js
+	--AppFilename=./Tvos.xcarchive
+	--TestFlightPlatform=appletvos
+	--AppStoreConnect_Auth_Key=1111A1A1AA AppStoreConnect_Auth_Issuer=ffffffff-ffff-ffff-ffff-ffffffffffff InstallerCertificateId="AAAAAAAAAA"
+```

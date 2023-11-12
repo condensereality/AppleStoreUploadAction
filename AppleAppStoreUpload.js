@@ -242,7 +242,14 @@ async function ReadPlistKey(PlistFilename,Key,Type='string')
 		Type,
 		PlistFilename
 	];
+	console.log(`Read plist; ${Command.join(' ')}`);
 	const Result = await RunShellCommand(Command);
+
+	//	gr: for uuid extraction, this was returning a list of 1 result...
+	if ( Array.isArray(Result.StdOut) )
+		if ( Result.StdOut.length == 1 )
+			return Result.StdOut[0];
+	
 	return Result.StdOut;
 }
 
@@ -258,6 +265,7 @@ async function WritePlistChange(PlistFilename,Key,Type,Value)
 		Value,
 		PlistFilename
 	];
+	console.log(`Write plist; ${Command.join(' ')}`);
 	await RunShellCommand(Command);
 }
 
@@ -302,9 +310,20 @@ async function GetAppBundleId(AppFilename)
 {
 	//	read bundle id from plist
 	const PlistFilename = `${AppFilename}/Contents/Info.plist`;
-	const BundleId = await ReadPlistKey( PlistFilename, 'CFBundleIdentifier' );
+	const IdentifierKey = 'CFBundleIdentifier';
+	const BundleId = await ReadPlistKey( PlistFilename, IdentifierKey );
 	return BundleId;
 }
+
+async function GetArchiveBundleId(ArchiveFilename)
+{
+	//	read bundle id from plist
+	const PlistFilename = `${ArchiveFilename}/Info.plist`;
+	const IdentifierKey = 'ApplicationProperties.CFBundleIdentifier';
+	const BundleId = await ReadPlistKey( PlistFilename, IdentifierKey );
+	return BundleId;
+}
+
 
 //	this may be provided by user in future
 async function GetEntitlementsFilename(AppFilename)
@@ -761,6 +780,68 @@ async function VerifyArchive(ArchiveFilename)
 }
 
 
+async function ArchiveToIpa(ArchiveFilename)
+{
+	//	inject provision file
+	//console.log(`Copy provisioning profile into xcarchive...`);
+	const ProvisioningProfileFilename = `${ArchiveFilename}/embedded.mobileprovision`;
+	const ProvisioningProfileContents = await DecodeBase64Param('ProvisioningProfile_Base64');
+	await WriteFile(ProvisioningProfileFilename,ProvisioningProfileContents);
+
+	const BundleId = await GetArchiveBundleId(ArchiveFilename);
+
+	//	generate export plist
+	const ExportPlistFilename = `./Export.plist`;
+	await RunShellCommand(`plutil -create xml1 ${ExportPlistFilename}`);
+	await WritePlistChange( ExportPlistFilename, `method`, 'string','app-store' );
+	await WritePlistChange( ExportPlistFilename, `provisioningProfiles`, 'xml',"'<dict/>'" );
+	
+	//	from provision file .UUID
+	//	but to do that, we need to convert the provision file to something readable
+	const ProvisioningProfileJsonFilename = `${ProvisioningProfileFilename}.json`;
+	const ConvertResult = await RunShellCommand(`security cms -D -i ${ProvisioningProfileFilename} > ${ProvisioningProfileJsonFilename}`);
+	const ProvisionUuid = await ReadPlistKey( ProvisioningProfileJsonFilename, 'UUID') ;
+	//console.log(`Extracted ProvisionUuid=${ProvisionUuid} (type=${typeof ProvisionUuid})`);
+	
+	const DictionaryValue = {};
+	DictionaryValue[BundleId] = ProvisionUuid;
+	await WritePlistChange( ExportPlistFilename, `provisioningProfiles`, 'json', `'${JSON.stringify(DictionaryValue)}'` );
+
+	
+	const ExportFolder = ArchiveFilename.replace('.xcarchive','.ipaexport');
+	
+	const Command = 
+	[
+		`xcodebuild`,
+		`-exportArchive`,
+		`-archivePath`,
+		ArchiveFilename,
+		`-exportPath`,
+		ExportFolder,
+		`-exportOptionsPlist`,
+		ExportPlistFilename
+	];
+	const Result = await RunShellCommand(Command);
+	
+	//	gr: nothing outputs the filename
+	//		its from the TARGET_NAME, which becomes
+	//		xyz.xcarchive/Products/Applications/Studio 5.app
+	//		I presume that's where the ipa filename comes from.
+	//		This app name is in the archive/Info.plist ApplicationProperties.ApplicationPath
+	let ExportedFilenames = await FileSystem.readdir(ExportFolder);
+	console.log(`ExportedFilenames = ${ExportedFilenames}`);
+
+	ExportedFilenames = ExportedFilenames.filter( Filename => Filename.includes('.ipa') );
+	
+	let IpaFilename = `${ExportFolder}/${ExportedFilenames[0]}`;
+	if ( !IpaFilename )
+		throw `Didn't find IPA filename from ${ExportedFilenames}`;
+	
+	return IpaFilename;
+}
+
+
+
 async function run() 
 {
 	//	grab required params
@@ -784,6 +865,15 @@ async function run()
 
 		const PackageFilename = await PackageApp( AppFilename, Keychain );
 		ArchiveFilename = PackageFilename;
+	}
+	
+	if ( TestFlightPlatform == PlatformTvos || TestFlightPlatform == PlatformIos )
+	{
+		//	archives need to be converted to .ipa's, signed and have provision files embedded
+		if ( ArchiveFilename.endsWith('.xcarchive') )
+		{
+			ArchiveFilename = await ArchiveToIpa(ArchiveFilename);
+		}
 	}
 	
 	await InstallAppStoreConnectAuth();

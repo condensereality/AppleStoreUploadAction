@@ -3,3 +3,6 @@ Entitlements.plist
 private_keys/AuthKey_*.p8
 SigningCertificate.cer.p12
 InstallerCertificate.cer
+Export.plist
+
+AppleStoreUpload.xcworkspace/xcuserdata/
