@@ -4,9 +4,9 @@ Action/Shared workflow to sign & upload apps to apple's app stores.
 Inputs
 ------------
 These inputs apply to the commandline (Prefixed with `--`) as well as the action, or can be put in environment variables
-- `AppFilename` path to app (`Mac.App`) or ios archive (`ios.ipa`)
+- `AppFilename=path` path to app (`Mac.App`) or ios archive (`ios.ipa`)
 - `Upload=true` defaulted to true, set to false to only do a verify
-- `TestFlightPlatform` `macos``ios``appletvos` Note it's is *not* `tvos`. This is the native argument for apple tools.
+- `TestFlightPlatform=` `macos|ios|appletvos` Note it's is *not* `tvos`. This is the native argument for apple tools.
 - `AppStoreConnect_Auth_Key` An Auth Key from app store connect, like `1234A5B6CD`
 - `AppStoreConnect_Auth_Issuer` Issuer from appstore connect (same page!) - a long hex guid `aaaaaaaa-bbbb-aaaa-dddd-12345678901`
 - `AppStoreConnect_Auth_P8_Base64` `.p8` file from AppStoreConnect encoded to base64
@@ -14,8 +14,15 @@ These inputs apply to the commandline (Prefixed with `--`) as well as the action
 	- Copy this base64 data into a secret and pass into action
 	- or testing locally
 	- `export AppStoreConnect_Auth_P8_Base64=$(base64 -i ./AuthKey.p8)`
+
+### Ios & Tvos
+- `ProvisioningProfile_Base64` env or input should be a base64 encoded version of your `embedded.mobileprovision` that will be inserted into your .ipa to allow testflight to be used(provisioned)
+	- `base64 -i ./embedded.mobileprovision > embedded.mobileprovision.base64.txt`
+	- Copy this base64 data into a secret and pass into action
+	- or testing locally
+	- `export ProvisioningProfile_Base64=$(base64 -i ./embedded.mobileprovision)`
 	
-Mac [app store] Specific
+### Mac [app store] Specific
 - `SignApp=true` (defaulted to true) will re-sign internal `.dylibs` and `.frameworks`, insert entitlements, modify `info.plist` with required keys and re-sign app. 
 - `SignPackage=true` (defaulted to `true`) this will sign the package with an installer certificate. The certificate is found internally by matching the team id.
 - `TeamIdentifier=AA1A111A1` Your team identifier (find this in any of your certificates next to your team name envin `Keychain access`, or in AppStoreConnect)
