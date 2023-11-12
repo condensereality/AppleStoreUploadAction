@@ -171,7 +171,12 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 				OnStdErr(err);
 				ProcessPromise.Resolve(ExitCode);
 			}
-			const Cmd = `${Exe} ${Arguments.join(' ')}`;
+			function EscapeArg(Argument)
+			{
+				return Argument.replace(' ','\\ ');
+			}
+			let EscapedArguments = Arguments.map(EscapeArg);
+			const Cmd = `${Exe} ${EscapedArguments.join(' ')}`;
 			exec( Cmd, OnExecFinished );
 		}
 	}
@@ -709,7 +714,20 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 	//	gr: this process has a LOT of output
 	//		so catch it and try and find all errors
 	const FailOnExitCode = false;
-	const RunResult = await RunShellCommand(`xcrun altool --${Function} --file ${ArchiveFilename} --type ${TestFlightPlatform} --apiKey ${ApiKey} --apiIssuer ${ApiIssuer}`, FailOnExitCode);
+	const RunCommand = [
+					 `xcrun`,
+					 `altool`,
+					 `--${Function}`,
+					 `--file`,
+					 `${ArchiveFilename}`,
+					 `--type`,
+					 `${TestFlightPlatform}`,
+					 `--apiKey`,
+					 `${ApiKey}`,
+					 `--apiIssuer`,
+					 `${ApiIssuer}`
+					 ];
+	const RunResult = await RunShellCommand(RunCommand, FailOnExitCode);
 	
 	if ( RunResult.ExitCode != 0 )
 	{
