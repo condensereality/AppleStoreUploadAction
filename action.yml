@@ -24,7 +24,7 @@ inputs:
   # options:
   #  - "macos"
   #  - "ios"
-  #  - "tvos"
+  #  - "appletvos"
  BundleVersion:
   required: false
   type: number

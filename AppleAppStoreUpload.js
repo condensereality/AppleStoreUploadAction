@@ -15,7 +15,7 @@ import { GetParam } from './Params.js'
 
 const PlatformMacos = 'macos';
 const PlatformIos = 'ios';
-const PlatformTvos = 'tvos';
+const PlatformTvos = 'appletvos';
 const SigningCertificateName = `Apple Distribution`;
 const InstallerCertificateName = `3rd Party Mac Developer Installer`;
 
