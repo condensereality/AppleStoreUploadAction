@@ -265,16 +265,17 @@ async function ReadPlistKey(PlistFilename,Key,Type='string')
 	return Result.StdOut;
 }
 
-async function WritePlistChange(PlistFilename,Key,Type,Value)
+async function WritePlistChange(PlistFilename,Key,Type,Value,WriteOperation='replace',WritePostOperation='')
 {
 	Key = EscapePlistKey(Key);
 	const Command =
 	[
 		`plutil`,
-		`-replace`,
+		`-${WriteOperation}`,
 		Key,
 		`-${Type}`,
 		Value,
+		WritePostOperation ? `-${WritePostOperation}` : '',
 		PlistFilename
 	];
 	console.log(`Write plist; ${Command.join(' ')}`);
@@ -354,7 +355,12 @@ async function GetEntitlementsFilename(AppFilename)
 	//	gr: make these param options! I dont want server, but temporarily needed to re-add it
 	await WritePlistChange( Filename, `com.apple.security.network.client`, 'bool','YES' );
 	await WritePlistChange( Filename, `com.apple.security.network.server`, 'bool','YES' );
-
+	
+	//	apple signin needs to be an array of strings with one "default" entry
+	await WritePlistChange( Filename, `com.apple.developer.applesignin`, 'array', '' );
+	await WritePlistChange( Filename, `com.apple.developer.applesignin`, 'string', 'Default', 'insert', 'append' );
+	
+	
 	//	need to insert team & app identifiers to match with provision file
 	await WritePlistChange( Filename, `com.apple.application-identifier`, 'string', ApplicationIdentifier );
 	await WritePlistChange( Filename, `com.apple.developer.team-identifier`, 'string', TeamIdentifier );
@@ -782,7 +788,7 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false,v001MacosMode=fals
 		//	todo: handle multiple "error" in one line
 		function ExtractErrorMessage(Line)
 		{
-			return FindTextAroundString( Line, ErrorKeyword, 10, 300 );
+			return FindTextAroundString( Line, ErrorKeyword, 10, 500 );
 		}
 
 		//	some giant stderr lines (json) so join all together, then split again to get individual lines

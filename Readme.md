@@ -1,4 +1,13 @@
-Action/Shared workflow to sign & upload apps to apple's app stores.
+Apple Store Upload Action
+================
+Action/Shared workflow to sign & upload apps to apple's app store(s) & testflight.
+- `macos` sets entitlements, adds provision, resigns packages, resigns app, and packages into a signed installer. Making it MacAppStore compatible
+	- This action is currently hard-coded to set the following entitlements. These will change to be an input variable later
+		- `com.apple.security.app-sandbox`
+		- `com.apple.security.network.client`
+		- `com.apple.security.network.server`
+		- `com.apple.developer.applesignin`
+- `ios` & `appletvos` can take `.xcarchive`s, embed mobile provision file convert to `.ipa` and sign
 
 
 Inputs
