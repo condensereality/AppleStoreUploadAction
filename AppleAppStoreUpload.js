@@ -640,7 +640,9 @@ async function CodeSignMacosApp(AppFilename,Keychain)
 			`--deep`,
 			AppFilename,
 		];
-		await RunShellCommand(CodesignDylibsArgs);
+		//	this broke in v0.0.2, working in v0.0.1
+		const EscapeArguments = false;
+		await RunShellCommand(CodesignDylibsArgs,EscapeArguments);
 		
 		console.log(`Generating entitlements file...`);
 		const EntitlementsFilename = await GetEntitlementsFilename(AppFilename);
@@ -659,7 +661,8 @@ async function CodeSignMacosApp(AppFilename,Keychain)
 			`"${SigningCertificateName}"`,
 			AppFilename,
 		];
-		await RunShellCommand(CodesignAppArgs);
+		//	this broke in v0.0.2, working in v0.0.1
+		await RunShellCommand(CodesignAppArgs,EscapeArguments);
 	}
 	finally
 	{
