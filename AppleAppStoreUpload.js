@@ -89,7 +89,9 @@ function CreatePromise()
 //	returns
 //	{ .ExitCode=0, .StdOut=[], .StdErr=[] }
 //	or throws on error
-async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
+//	gr: some calls are producing incorrect results with the argument escaping, some dont. Need to figure this out
+//		macos calls for certificates don't want to be escaped, ios/tvos ones did
+async function RunShellCommand(ExeAndArguments,EscapeArguments=true,ThrowOnNonZeroExitCode=true)
 {
 	if ( !ExeAndArguments )
 		ExeAndArguments = [];
@@ -171,12 +173,22 @@ async function RunShellCommand(ExeAndArguments,ThrowOnNonZeroExitCode=true)
 				OnStdErr(err);
 				ProcessPromise.Resolve(ExitCode);
 			}
-			function EscapeArg(Argument)
+			
+			function GetCmdEscaped()
 			{
-				return Argument.replace(' ','\\ ');
+				function EscapeArg(Argument)
+				{
+					return Argument.replace(' ','\\ ');
+				}
+				let EscapedArguments = Arguments.map(EscapeArg);
+				return `${Exe} ${EscapedArguments.join(' ')}`;
 			}
-			let EscapedArguments = Arguments.map(EscapeArg);
-			const Cmd = `${Exe} ${EscapedArguments.join(' ')}`;
+			function GetCmdNotEscaped()
+			{
+				return `${Exe} ${Arguments.join(' ')}`;
+			}
+			
+			const Cmd = EscapeArguments ? GetCmdEscaped() : GetCmdNotEscaped();
 			exec( Cmd, OnExecFinished );
 		}
 	}
@@ -706,7 +718,7 @@ async function InstallAppStoreConnectAuth()
 }
 
 
-async function UploadArchive(ArchiveFilename,VerifyOnly=false)
+async function UploadArchive(ArchiveFilename,VerifyOnly=false,v001MacosMode=false)
 {
 	const Function = VerifyOnly ? `validate-app` : `upload-app`;
 	
@@ -733,7 +745,10 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 	//	gr: this process has a LOT of output
 	//		so catch it and try and find all errors
 	const FailOnExitCode = false;
-	const RunCommand = [
+
+	//	v0.0.2 working for ios/tvos
+	let EscapeArguments = true;
+	let RunCommand = [
 					 `xcrun`,
 					 `altool`,
 					 `--${Function}`,
@@ -746,7 +761,16 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 					 `--apiIssuer`,
 					 `${ApiIssuer}`
 					 ];
-	const RunResult = await RunShellCommand(RunCommand, FailOnExitCode);
+
+	
+	//	v0.0.1 working for macos
+	if ( v001MacosMode )
+	{
+		EscapeArguments = false;
+		RunCommand = `xcrun altool --${Function} --file ${ArchiveFilename} --type ${TestFlightPlatform} --apiKey ${ApiKey} --apiIssuer ${ApiIssuer}`;
+	}
+	
+	const RunResult = await RunShellCommand(RunCommand, EscapeArguments, FailOnExitCode);
 	
 	if ( RunResult.ExitCode != 0 )
 	{
@@ -774,9 +798,9 @@ async function UploadArchive(ArchiveFilename,VerifyOnly=false)
 	//console.log(`stderr: ${RunResult.StdErr}`);
 }
 
-async function VerifyArchive(ArchiveFilename)
+async function VerifyArchive(ArchiveFilename,v001MacosMode)
 {
-	return await UploadArchive( ArchiveFilename, true );
+	return await UploadArchive( ArchiveFilename, true,v001MacosMode );
 }
 
 
@@ -849,6 +873,7 @@ async function run()
 	const TestFlightPlatform = GetParam('TestFlightPlatform');
 	
 	let ArchiveFilename = AppFilename;
+	const v001MacosMode = (TestFlightPlatform == PlatformMacos);
 	
 	if ( TestFlightPlatform == PlatformMacos )
 	{
@@ -877,13 +902,14 @@ async function run()
 	}
 	
 	await InstallAppStoreConnectAuth();
-	await VerifyArchive(ArchiveFilename);
-				
+	await VerifyArchive(ArchiveFilename,v001MacosMode);
+
 	//	by default we upload, but user can avoid it
 	const DoUpload = GetParam('Upload',true);
 	if ( DoUpload )
 	{
-		await UploadArchive(ArchiveFilename);
+		const VerifyOnly = false;
+		await UploadArchive(ArchiveFilename, VerifyOnly, v001MacosMode);
 	}
 	else
 	{
