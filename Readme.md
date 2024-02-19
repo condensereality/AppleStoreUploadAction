@@ -24,6 +24,7 @@ These inputs apply to the commandline (Prefixed with `--`) as well as the action
 	
 ### Mac [app store] Specific
 - `SignApp=true` (defaulted to true) will re-sign internal `.dylibs` and `.frameworks`, insert entitlements, modify `info.plist` with required keys and re-sign app. 
+- `BundleVersion=0` if provided, a new bundle-version (`Your App 1.2.3(0)` build version) is inserted into `Info.plist` to allow re-submission of same version
 - `SignPackage=true` (defaulted to `true`) this will sign the package with an installer certificate. The certificate is found internally by matching the team id.
 - `TeamIdentifier=AA1A111A1` Your team identifier (find this in any of your certificates next to your team name envin `Keychain access`, or in AppStoreConnect)
 - `SigningCertificate_P12_Base64` env or input should be a base64 encoded version of your `~Apple ~Distribution` signing certificate exported to `.p12`
@@ -41,7 +42,13 @@ These inputs apply to the commandline (Prefixed with `--`) as well as the action
 	- Copy this base64 data into a secret and pass into action
 	- or testing locally
 	- `export ProvisioningProfile_Base64=$(base64 -i ./embedded.provisionprofile)`
-- `BundleVersion=0` if provided, a new bundle-version (`Your App 1.2.3(0)` build version) is inserted into `Info.plist` to allow re-submission of same version
+- `InstallerCertificate_P12_Base64` env or input should be a base64 encoded `Mac Installer Distribution Certificate`
+	- Get your `mac_installer.cer` from [https://developer.apple.com](https://developer.apple.com) under `Certificates`, find the one for `ac Installer Distribution Certificate`
+	- Install to keychain (must be under a local keychain) and should appear as `3rd party mac developer installer`
+	- Export to `mac_installer.p12` with password
+	- `base64 -i ./mac_installer.p12 > mac_installer.p12.base64.txt`
+	- `export InstallerCertificate_P12_Base64=$(base64 -i ./mac_installer.p12)`
+
 
 Local Testing
 -----------------
@@ -55,9 +62,11 @@ node ./AppleAppStoreUpload.js `
 	--AppFilename=./Mac.app
 	--SignApp=true
 	--TestFlightPlatform=macos 
+	--TeamIdentifier=AA1A111A1
 	--AppStoreConnect_Auth_Key=1111A1A1AA
 	--AppStoreConnect_Auth_Issuer=ffffffff-ffff-ffff-ffff-ffffffffffff
 	--SigningCertificate_Password=password
+	--InstallerCertificate_Password=password
 ```
 
 ### For tvos or ios
