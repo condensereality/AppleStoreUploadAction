@@ -355,7 +355,8 @@ async function GetEntitlementsFilename(AppFilename)
 	//	gr: make these param options! I dont want server, but temporarily needed to re-add it
 	await WritePlistChange( Filename, `com.apple.security.network.client`, 'bool','YES' );
 	await WritePlistChange( Filename, `com.apple.security.network.server`, 'bool','YES' );
-	
+	await WritePlistChange( Filename, `com.apple.security.files.downloads.read-only`, 'bool','YES' );
+
 	//	apple signin needs to be an array of strings with one "default" entry
 	await WritePlistChange( Filename, `com.apple.developer.applesignin`, 'array', '' );
 	await WritePlistChange( Filename, `com.apple.developer.applesignin`, 'string', 'Default', 'insert', 'append' );
